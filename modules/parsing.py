@@ -1,10 +1,10 @@
 import os
 import sys
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from combination import Combination
-from genotype import Genotype
-from errors import IncompatibleGenotypeError
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from modules.combination import Combination
+from modules.genotype import Genotype
+from modules.errors import IncompatibleGenotypeError
 
 def parse_genotypes(gtString):
     '''
@@ -70,10 +70,9 @@ def parse_linkage(linkageList, weakDistance, moderateDistance, strongDistance, n
                                         linkage value should correspond to; 'none' signals a new
                                         chromosome and does not need a basepairs value.
     '''
-    if numQTLs > 1:
-        if len(linkageList) != numQTLs-1:
-            raise ValueError(f"{numQTLs} values were given to -q, which means we expect {numQTLs-1} " +
-                             f"values to be given to -l; you instead gave {len(linkageList)}")
+    if len(linkageList) != numQTLs-1:
+        raise ValueError(f"{numQTLs} values were given to -q, which means we expect {numQTLs-1} " +
+                         f"values to be given to -l; you instead gave {len(linkageList)}")
     
     # Seed first QTL position
     chromNumber = 1

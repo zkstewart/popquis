@@ -3,8 +3,8 @@ import sys
 
 from itertools import combinations
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from errors import InvalidGenotypeError, IncompatibleGenotypeError
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from modules.errors import InvalidGenotypeError, IncompatibleGenotypeError
 
 class Genotype:
     '''
