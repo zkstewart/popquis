@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 Zachary Kenneth Stewart
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import os
 import sys
@@ -7,6 +11,7 @@ import unittest
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.parsing import parse_genotypes, parse_combination, parse_linkage
 from modules.errors import InvalidGenotypeError, IncompatibleGenotypeError
+from modules.combination import Combination
 
 # Define unit tests
 class TestParsing(unittest.TestCase):
@@ -153,6 +158,71 @@ class TestParsing(unittest.TestCase):
             positions1 = parse_linkage(linkageList1, weak, moderate, strong, 2)
         with self.assertRaises(ValueError):
             positions2 = parse_linkage(linkageList2, weak, moderate, strong, 1)
+
+class TestCombinationEvaluation(unittest.TestCase):
+    def test_evaluation_when_valid(self):
+        # Arrange
+        combinationStrs = [
+            "1 AND 2 OR 3",
+            "1 AND (2 OR 3)",
+            "(1 AND 2) OR 3",
+            "(1 OR 2 OR 3)",
+            "((1 AND 2) OR 3)"
+        ]
+        evalStrs = [
+            "{0} and {1} or {2}",
+            "{0} and ({1} or {2})",
+            "({0} and {1}) or {2}",
+            "({0} or {1} or {2})",
+            "(({0} and {1}) or {2})"
+        ]
+        qtlBoolCombos = [
+            (qtl1, qtl2, qtl3)
+            for qtl1 in (True, False)
+            for qtl2 in (True, False)
+            for qtl3 in (True, False)
+        ]
+        
+        # Act & Assert in loop
+        for combinationStr, evalStr in zip(combinationStrs, evalStrs):
+            for qtlBoolCombo in qtlBoolCombos:
+                combination = Combination(combinationStr)
+                evaluatorResult = combination.evaluate({
+                    i+1:qtlBoolCombo[i] for i in range(len(qtlBoolCombo))
+                })
+                evalStrResult = eval(evalStr.format(*qtlBoolCombo))
+                self.assertEqual(evaluatorResult, evalStrResult, 
+                                 f"'{combinationStr}' gives inconsistent output")
+    
+    def test_evaluation_when_invalid(self):
+        # Arrange
+        combinationStrs = [
+            "1 AND 2 OR 3",
+            "1 AND (2 OR 3)",
+            "(1 AND 2) OR 3",
+            "(1 OR 2 OR 3)",
+            "((1 AND 2) OR 3)"
+        ]
+        valueErrorDicts = [
+            {1: True, 2: True}, # too few numbers
+            {1: True, 2: True, 3: True, 4: True}, # too many numbers
+            {}, # empty dict
+            {2: True, 3: True, 4: True}, # mismatching numbers
+            {"1": True, "2": True, "3": True} # key type mismatch
+        ]
+        typeErrorDicts = [
+            [True, True, True] # object type mismatch
+        ]
+        
+        # Act & Assert in loop on errors
+        for combinationStr in combinationStrs:
+            combination = Combination(combinationStr)
+            for variableDict in valueErrorDicts:
+                with self.assertRaises(ValueError):
+                    evaluatorResult = combination.evaluate(variableDict)
+            for variableDict in typeErrorDicts:
+                with self.assertRaises(TypeError):
+                    evaluatorResult = combination.evaluate(variableDict)
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,3 +1,8 @@
+# Copyright (C) 2026 Zachary Kenneth Stewart
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import os
 import sys
 
@@ -135,6 +140,6 @@ def parse_qtl_encoding(qtls, combination, linkage, weakDistance, moderateDistanc
     combinationEvaluator = parse_combination(combination, numQTLs)
     
     # Handle linkage
-    qtlPositions = parse_linkage(linkageList, weakDistance, moderateDistance, strongDistance, numQTLs)
+    qtlPositions = parse_linkage(linkage, weakDistance, moderateDistance, strongDistance, numQTLs)
     
     return qtlGenotypes, combinationEvaluator, qtlPositions
