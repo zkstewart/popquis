@@ -32,7 +32,7 @@ class Combination:
     def tree(self, value):
         # Immediately reject empty values
         if value.strip() == "":
-            raise ValueError(f"Combination string '{value}' is empty and cannot be interpreted.")
+            raise ValueError(f"Combination string is empty and cannot be interpreted.")
         
         # Make input lowercase for compatibility with ast library interpretation
         value = value.lower()

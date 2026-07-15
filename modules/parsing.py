@@ -123,7 +123,7 @@ def parse_qtl_encoding(qtls, combination, linkage, weakDistance, moderateDistanc
     '''
     numQTLs = len(qtls)
     
-    # Handle qtls
+    # Parse qtls to Genotype objects
     lastPloidy = None
     qtlGenotypes = []
     for i in range(len(qtls)):
@@ -136,10 +136,21 @@ def parse_qtl_encoding(qtls, combination, linkage, weakDistance, moderateDistanc
         qtlGenotypes.append(genotypes)
         lastPloidy = parent1.ploidy
     
-    # Handle combination
+    # Validate that this simulation has any merit
+    possibleOutcomes = 0
+    for parent1, parent2, offspring in qtlGenotypes:
+        possibleOffspring = parent1.cross(parent2)
+        possibleOutcomes = max(possibleOutcomes, len(possibleOffspring))
+    if possibleOutcomes < 2:
+        raise ValueError("All QTLs provided to popquis -q have a deterministic outcome; " +
+                         "in other words, parent genotypes can only produce one offspring genotype " +
+                         "which means that no segregation of offspring will be possible " + 
+                         "and hence there is no point in performing this simulation.")
+    
+    # Parse combination to Combination object with .evaluate() method
     combinationEvaluator = parse_combination(combination, numQTLs)
     
-    # Handle linkage
+    # Parse linkage to positions tuples
     qtlPositions = parse_linkage(linkage, weakDistance, moderateDistance, strongDistance, numQTLs)
     
     return qtlGenotypes, combinationEvaluator, qtlPositions

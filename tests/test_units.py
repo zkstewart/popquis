@@ -9,7 +9,7 @@ import sys
 import unittest
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from modules.parsing import parse_genotypes, parse_combination, parse_linkage
+from modules.parsing import parse_genotypes, parse_combination, parse_linkage, parse_qtl_encoding
 from modules.errors import InvalidGenotypeError, IncompatibleGenotypeError
 from modules.combination import Combination
 
@@ -26,7 +26,7 @@ class TestParsing(unittest.TestCase):
         genotypes2 = parse_genotypes(gtString2)
         genotypes3 = parse_genotypes(gtString3)
         
-        # Assert
+        # Assert on equality
         self.assertEqual(genotypes1[0].alleles, [0, 1])
         self.assertEqual(genotypes1[1].alleles, [1, 1])
         self.assertEqual(genotypes1[2].alleles, [1, 1])
@@ -46,7 +46,7 @@ class TestParsing(unittest.TestCase):
         gtString3 = "0/1:1/2"
         gtString4 = "0/1:1/2;0/11"
         
-        # Act & Assert on anticipated errors
+        # Act & Assert on errors
         with self.assertRaises(InvalidGenotypeError):
             genotypes1 = parse_genotypes(gtString1)
         with self.assertRaises(InvalidGenotypeError):
@@ -62,7 +62,7 @@ class TestParsing(unittest.TestCase):
         gtString2 = "0/0:0/1:1/1"
         gtString3 = "0/1:0/1:0/2"
         
-        # Act & Assert on anticipated errors
+        # Act & Assert on errors
         with self.assertRaises(IncompatibleGenotypeError):
             genotypes1 = parse_genotypes(gtString1)
         with self.assertRaises(IncompatibleGenotypeError):
@@ -158,6 +158,43 @@ class TestParsing(unittest.TestCase):
             positions1 = parse_linkage(linkageList1, weak, moderate, strong, 2)
         with self.assertRaises(ValueError):
             positions2 = parse_linkage(linkageList2, weak, moderate, strong, 1)
+    
+    def test_parse_qtl_encoding_when_valid(self):
+        # Arrange
+        qtls1 = ["0/1:1/1:1/1", "0/0:0/1:0/1", "0/1:1/2:0/2"]
+        combination1 = "1 AND 2 AND 3"
+        linkage1 = ["none", "weak"]
+        
+        qtls2 = ["0/1:1/1:1/1"]
+        combination2 = "1"
+        linkage2 = []
+        
+        weak = 100
+        moderate = 10
+        strong = 1
+        
+        # Act & Assert (no error is a pass)
+        qtlGenotypes1, combinationEvaluator1, qtlPositions1 = parse_qtl_encoding(
+            qtls1, combination1, linkage1, weak, moderate, strong
+        )
+        qtlGenotypes2, combinationEvaluator2, qtlPositions2 = parse_qtl_encoding(
+            qtls2, combination2, linkage2, weak, moderate, strong
+        )
+    
+    def test_parse_qtl_encoding_when_invalid(self):
+        # Arrange
+        qtls1 = ["0/0:0/0:0/0"] # deterministic outcome
+        combination1 = "1"
+        linkage1 = []
+        weak = 100
+        moderate = 10
+        strong = 1
+        
+        # Act & Assert on errors
+        with self.assertRaises(ValueError):
+            qtlGenotypes1, combinationEvaluator1, qtlPositions1 = parse_qtl_encoding(
+                qtls1, combination1, linkage1, weak, moderate, strong
+            )
 
 class TestCombinationEvaluation(unittest.TestCase):
     def test_evaluation_when_valid(self):
@@ -183,7 +220,7 @@ class TestCombinationEvaluation(unittest.TestCase):
             for qtl3 in (True, False)
         ]
         
-        # Act & Assert in loop
+        # Act & Assert in loop on equality
         for combinationStr, evalStr in zip(combinationStrs, evalStrs):
             for qtlBoolCombo in qtlBoolCombos:
                 combination = Combination(combinationStr)
