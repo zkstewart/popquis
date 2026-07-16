@@ -11,7 +11,7 @@ class Chromosome:
         chromID -- a string identifying the chromosome.
         positions -- a list of integers indicating the location of each QTL in basepairs.
         genotypes -- a list of Genotype objects ordered to correspond to the given positions.
-        genemap -- a Genemap object corresponding to this chromosome.
+        chromMap -- a ChromosomeMap object corresponding to this chromosome.
         ploidy -- an integer indicating the number of chromosome copies.
         numVariants -- an integer indicating how many variants/genotypes/alleles/SNPs this chromosome represents.
         array -- a numpy array with shape (1, numVariants, ploidy) which is the fundamental data structure
@@ -19,11 +19,11 @@ class Chromosome:
     Methods:
         generate -- uses parameter values to set self.array
     '''
-    def __init__(self, chromID, positions, genotypes, genemap):
+    def __init__(self, chromID, positions, genotypes, chromMap):
         self.chromID = chromID
         self.positions = positions
         self.genotypes = genotypes
-        self.genemap = genemap
+        self.chromMap = chromMap
         self.strands = None
         self.generate()
         self.isChromosome = True # object type validator
@@ -72,13 +72,13 @@ class Chromosome:
         
         # Assign each genotype to its closest physical position
         self.ploidy = self.genotypes[0].ploidy
-        distances = [ [ abs(x - y) for y in self.positions ] for x in self.genemap.df["bp"] ]
+        distances = [ [ abs(x - y) for y in self.positions ] for x in self.chromMap.df["bp"] ]
         closest = [ x.index(min(x)) for x in distances ]
         self.array = np.array([ self.genotypes[genotypeIndex].alleles for genotypeIndex in closest ]).reshape(1, len(closest), self.ploidy)
         self.numVariants = len(closest)
     
     def __repr__(self):
-        return "<Chromosome object;chromID={0};ploidy={1};numVariants={2}>".format(
+        return "<Chromosome object;chromID='{0}';ploidy={1};numVariants={2}>".format(
             self.chromID,
             self.ploidy,
             self.numVariants

@@ -5,7 +5,7 @@
 
 import pandas as pd
 
-class Genemap:
+class ChromosomeMap:
     '''
     Properties:
         chromID -- a string identifying the chromosome.
@@ -15,7 +15,7 @@ class Genemap:
                  across each Mbp of genome length; default is 1000.
         df -- a pandas DataFrame suitable for chromax handling.
     Methods:
-        generate -- uses parameter values to produce the genemap DataFrame.
+        generate -- uses parameter values to produce the internal DataFrame.
     '''
     def __init__(self, chromID, length, cmMbp, snpMbp):
         self.chromID = chromID
@@ -23,7 +23,7 @@ class Genemap:
         self.cmMbp = cmMbp
         self.snpMbp = snpMbp
         self.generate()
-        self.isGenemap = True # object type validator
+        self.isChromosomeMap = True # object type validator
     
     @property
     def chromID(self):
@@ -89,7 +89,7 @@ class Genemap:
     
     def __repr__(self):
         lengthRepr = f"{(self.length / 1e6)} Mbp" if self.length >= 1e6 else self.length
-        return "<Genemap object;chromID={0};length={1};cmMbp={2};snpMbp={3}>".format(
+        return "<ChromosomeMap object;chromID='{0}';length={1};cmMbp={2};snpMbp={3}>".format(
             self.chromID,
             lengthRepr,
             self.cmMbp,
