@@ -13,7 +13,7 @@ class Genemap:
         cmMbp -- a float value giving the centiMorgan per Mbp.
         snpMbp -- an integer giving the approximate number of SNPs to be spaced evenly
                  across each Mbp of genome length; default is 1000.
-        genemap -- a pandas DataFrame suitable for chromax handling.
+        df -- a pandas DataFrame suitable for chromax handling.
     Methods:
         generate -- uses parameter values to produce the genemap DataFrame.
     '''
@@ -74,12 +74,18 @@ class Genemap:
         self._snpMbp = value
     
     def generate(self):
-        mapList = [["CHR.PHYS", "cM", "Trait"]]
-        for i in range(0, self.length // self.snpMbp):
-            physicalPosition = i * self.snpMbp
-            cMPosition = (physicalPosition / 1000000) * self.cmMbp
-            mapList.append([self.chromID, cMPosition, 0.01])
-        self.genemap = pd.DataFrame(mapList[1:], columns=mapList[0])
+        # Make sure our length and snpMbp parameters lead to an interpretable result
+        stepSize = int(1e6) // self.snpMbp
+        if stepSize > self.length:
+            raise ValueError(f"Genetic map with '{self.snpMbp}' SNPs per Mbp is too sparse for a " +
+                             f"chromosome of {self.length} bp in length (i.e., we do not find any " +
+                             "SNPs within a section of genome this short)")
+        
+        mapList = [["CHR.PHYS", "bp", "cM", "Trait"]]
+        for bp in range(0, self.length, stepSize):
+            cM = (bp / int(1e6)) * self.cmMbp
+            mapList.append([self.chromID, bp, cM, 0.01])
+        self.df = pd.DataFrame(mapList[1:], columns=mapList[0])
     
     def __repr__(self):
         lengthRepr = f"{(self.length / 1e6)} Mbp" if self.length >= 1e6 else self.length

@@ -14,7 +14,7 @@ def validate_args(args):
     # Validate numeric arguments
     if args.threads < 1:
         raise ValueError("-t must be a positive integer")
-    if args.cmMB <= 0:
+    if args.cmMbp <= 0:
         raise ValueError("--centimorgans must greater than zero")
     if args.weakDistance < 1:
         raise ValueError("--weak must be a positive integer")

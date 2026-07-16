@@ -8,10 +8,15 @@ import os
 import sys
 import unittest
 
+import numpy as np
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from modules.parsing import parse_genotypes, parse_combination, parse_linkage, parse_qtl_encoding
-from modules.errors import InvalidGenotypeError, IncompatibleGenotypeError
+from modules.chromosome import Chromosome
 from modules.combination import Combination
+from modules.errors import InvalidGenotypeError, IncompatibleGenotypeError
+from modules.genemap import Genemap
+from modules.genotype import Genotype # note that the Genotype class is implicitly tested by the TestParsing class herein
+from modules.parsing import parse_genotypes, parse_combination, parse_linkage, parse_qtl_encoding
 
 # Define unit tests
 class TestParsing(unittest.TestCase):
@@ -260,6 +265,93 @@ class TestCombinationEvaluation(unittest.TestCase):
             for variableDict in typeErrorDicts:
                 with self.assertRaises(TypeError):
                     evaluatorResult = combination.evaluate(variableDict)
+
+class TestGenemap(unittest.TestCase):
+    def test_genemap_when_valid(self):
+        # Arrange
+        chromID = "chr1"
+        cmMbp = 3
+        length1 = 100000
+        snpMbp1 = 1000 # should equate to 1 SNP every 1000 bp
+        
+        length2 = 100
+        snpMbp2 = int(1e6) # should equate to 1 SNP every 1 bp
+        
+        length3 = int(1e6)
+        snpMbp3 = 1 # should equate to 1 SNP every 1 Mbp
+        
+        # Act
+        genemap1 = Genemap(chromID, length1, cmMbp, snpMbp1)
+        nrow1 = len(genemap1.df)
+        expectedNrow1 = length1 // (int(1e6)//snpMbp1)
+        
+        genemap2 = Genemap(chromID, length2, cmMbp, snpMbp2)
+        nrow2 = len(genemap2.df)
+        expectedNrow2 = length2 // (int(1e6)//snpMbp2)
+        
+        genemap3 = Genemap(chromID, length3, cmMbp, snpMbp3)
+        nrow3 = len(genemap3.df)
+        expectedNrow3 = length3 // (int(1e6)//snpMbp3)
+        
+        # Assert
+        self.assertEqual(expectedNrow1, nrow1)
+        self.assertEqual(expectedNrow2, nrow2)
+        self.assertEqual(expectedNrow3, nrow3)
+    
+    def test_genemap_when_invalid(self):
+        # Arrange
+        chromID = "chr1"
+        length = 1
+        cmMbp = 3
+        snpMbp = 1
+        
+        # Act & Assert on error
+        with self.assertRaises(ValueError):
+            genemap = Genemap(chromID, length, cmMbp, snpMbp)
+
+class TestChromosome(unittest.TestCase):
+    def test_chromosome_when_valid(self):
+        # Arrange
+        chromID = "chr1"
+        positions = [50, 100, 150]
+        length = 200
+        cmMbp = 1
+        snpMbp = int(1e6)
+        
+        transitionPoints = [(positions[0]+positions[1])//2, (positions[1]+positions[2])//2]
+        genotypeTransitions1 = [[0,0], [0,1], [1,1]]
+        genotypeTransitions2 = [[0,0,0,0], [0,0,1,1], [1,1,1,1]]
+        
+        genemap = Genemap(chromID, length, cmMbp, snpMbp) # 1 SNP per bp
+        
+        genotypes1 = [Genotype("0/0"), Genotype("0/1"), Genotype("1/1")]
+        ploidy1 = 2
+        
+        genotypes2 = [Genotype("0/0/0/0"), Genotype("0/0/1/1"), Genotype("1/1/1/1")]
+        ploidy2 = 4
+        
+        # Act
+        chromosome1 = Chromosome(chromID, positions, genotypes1, genemap)
+        chromosome2 = Chromosome(chromID, positions, genotypes2, genemap)
+        
+        # Assert
+        self.assertEqual((1, length, ploidy1), chromosome1.array.shape)
+        for i, gt in enumerate(chromosome1.array[0]):
+            if i <= transitionPoints[0]:
+                self.assertTrue(np.array_equal(gt, genotypeTransitions1[0]))
+            elif i <= transitionPoints[1]:
+                self.assertTrue(np.array_equal(gt, genotypeTransitions1[1]))
+            else:
+                self.assertTrue(np.array_equal(gt, genotypeTransitions1[2]))
+        
+        self.assertEqual((1, length, ploidy2), chromosome2.array.shape)
+        for i, gt in enumerate(chromosome2.array[0]):
+            if i <= transitionPoints[0]:
+                self.assertTrue(np.array_equal(gt, genotypeTransitions2[0]))
+            elif i <= transitionPoints[1]:
+                self.assertTrue(np.array_equal(gt, genotypeTransitions2[1]))
+            else:
+                self.assertTrue(np.array_equal(gt, genotypeTransitions2[2]))
 
 if __name__ == '__main__':
     unittest.main()
