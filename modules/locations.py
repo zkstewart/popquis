@@ -23,10 +23,6 @@ class Locations:
     
     # Naive file properties
     @property
-    def parentsNpy(self):
-        return os.path.join(self.storageDir, "parents.npy")
-    
-    @property
     def group1Npy(self):
         return os.path.join(self.storageDir, "group1.npy")
     

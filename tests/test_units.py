@@ -19,6 +19,11 @@ from modules.genome import Genome
 from modules.genomemap import GenomeMap
 from modules.genotype import Genotype # note that the Genotype class is implicitly tested by the TestParsing class herein
 from modules.parsing import parse_genotypes, parse_combination, parse_linkage, parse_qtl_encoding
+from modules.population import Population
+
+# Specify data locations
+testDir = os.path.dirname(os.path.abspath(__file__))
+tmpDir = os.path.join(testDir, "tmp")
 
 # Define unit tests
 class TestParsing(unittest.TestCase):
@@ -445,6 +450,31 @@ class TestGenomeMap(unittest.TestCase):
                 assert genomeRow.equals(chromRow)
                 #self.assertTrue(genomeRow.equals(chromRow))
                 ongoingCount += 1
+
+class TestPopulation(unittest.TestCase):
+    def test_when_valid(self):
+        # Arrange
+        individual1 = np.array([0, 1, 0, 1, 0, 1]).reshape(1, 3, 2) # 3 heterozygous genotypes
+        individual2 = np.array([1, 2, 1, 2, 1, 2]).reshape(1, 3, 2) # 3 heterozygous genotypes
+        
+        os.makedirs(tmpDir, exist_ok=True)
+        tmpFile = os.path.join(tmpDir, "tmp.npy")
+        
+        # Act
+        pop = Population(tmpFile)
+        pop.add(individual1)
+        pop.add(individual2)
+        pop.load()
+        
+        retrieved1 = pop.retrieve([0])
+        retrieved2 = pop.retrieve([1])
+        
+        # Assert
+        self.assertTrue(np.array_equal(individual1, retrieved1))
+        self.assertTrue(np.array_equal(individual2, retrieved2))
+        
+        # Clean-up
+        os.unlink(tmpFile)
 
 if __name__ == '__main__':
     unittest.main()

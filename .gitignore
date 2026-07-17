@@ -182,3 +182,6 @@ cython_debug/
 
 # Visual Studio Code
 .vscode/
+
+# popquis stuff:
+tests/tmp
