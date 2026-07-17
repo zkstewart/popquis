@@ -16,6 +16,8 @@ def validate_args(args):
         raise ValueError("-t must be a positive integer")
     if args.cmMbp <= 0:
         raise ValueError("--centimorgans must greater than zero")
+    if args.popSize < 10:
+        raise ValueError("--popsize less than 10 is likely to provide meaningless results; provide a higher value")
     if args.weakDistance < 1:
         raise ValueError("--weak must be a positive integer")
     if args.moderateDistance < 1:
@@ -28,3 +30,14 @@ def validate_args(args):
     
     # Create locations object
     args.locations = Locations(args.outputDirectory) # internally validates args.outputDirectory
+
+def validate_breeding_population(locations):
+    '''
+    This function seeks to ensure that the population has been produced using
+    the same variables if the program has been interrupted and resumed.
+    '''
+    group1 = Population(locations.group1Npy)
+    group1.load()
+    group2 = Population(locations.group2Npy)
+    group2.load()
+    raise NotImplementedError()
