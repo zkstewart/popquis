@@ -46,7 +46,6 @@ class Population:
             parentDir = os.path.dirname(value)
             if os.path.isdir(parentDir):
                 pass
-                #open(value, "w").close() # touch file
             elif not os.path.exists(parentDir):
                 raise NotADirectoryError(f"Population object cannot create fileName '{value}' since its parent " +
                                          f"location '{parentDir}' does not exist. Create this location first.")
@@ -89,7 +88,6 @@ class Population:
         Parameters:
             array -- an array representing one simulated individual
         '''
-        ## TBD: need to validate that input is a single individual? or just trust?
         with NpyAppendArray(self.fileName, delete_if_exists=False) as npaa:
             npaa.append(array)
     

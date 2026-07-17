@@ -6,6 +6,8 @@
 import os
 import sys
 
+import numpy as np
+
 from chromax import Simulator
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -40,7 +42,11 @@ class Breeder:
         Parameters:
             positions -- a list of tuples as derived from modules.parsing.parse_linkage() indicating
                          the location of each QTL as: ('chromID', positionInBp)
-            genotypes -- a list of Genotype objects corresponding to the given positions
+            genotypes -- a list of lists with structure like:
+                         [
+                             [Genotype1, Genotype2, Genotype3], # parent1, parent2, offspring
+                             [Genotype4, Genotype5, Genotype6],
+                         ]; this should match up with the positions list
             cmMbp -- a float value giving the centiMorgan per Mbp.
             snpMbp -- an integer giving the approximate number of SNPs to be spaced evenly
                       across each Mbp of genome length; default is 1000.
@@ -88,7 +94,7 @@ class Breeder:
             self.markerIndices.append(int(row.index[0]))
             self.markerAlleles.append(genotype.alleles)
     
-    def produce_progeny(self, locations, combinationEvaluator, minimumGroupSize=10000, seed=1234):
+    def produce_progeny(self, locations, combinationEvaluator, batchSize=1000, minimumGroupSize=10000, seed=1234):
         # Init the simulator
         simulator = Simulator(genetic_map=self.genomeMap.df, seed=seed)
         
@@ -103,10 +109,9 @@ class Breeder:
         
         # Simulate progeny in batches to attain a pre-requisite population size for each group
         numCrosses = 1 # we only simulate a single generation
-        numOffspring = 1000 # only simulate a few at a time to limit memory consumption
         while (group1.individuals is None or group1.individuals < minimumGroupSize) or (group2.individuals is None or group2.individuals < minimumGroupSize):
-            f1, _ = simulator.random_crosses(parents, numCrosses, n_offspring=numOffspring) # f1 has shape (n_crosses, n_individuals, n_loci, n_alleles)
-            f1 = f1.reshape(numOffspring, len(self.genomeMap.df), self.parent1.ploidy) # reshape to (n_individuals, n_loci, n_alleles)
+            f1, _ = simulator.random_crosses(parents, numCrosses, n_offspring=batchSize) # f1 has shape (n_crosses, n_individuals, n_loci, n_alleles)
+            f1 = f1.reshape(batchSize, len(self.genomeMap.df), self.parent1.ploidy) # reshape to (n_individuals, n_loci, n_alleles)
             f1 = [ np.asarray(x) for x in f1 ] # change type: jaxlib._jax.ArrayImpl -> np.array
             
             # Segregate progeny based on combined QTL inheritance
@@ -116,20 +121,36 @@ class Breeder:
                 offspringAlleles = [ offspring[index] for index in self.markerIndices ]
                 offspringMarkers = [ np.array_equal(offspringAllele, markerAllele) for offspringAllele, markerAllele in zip(offspringAlleles, self.markerAlleles) ]
                 isGroup1 = combinationEvaluator.evaluate(offspringMarkers)
-                if isGroup1 and (group1.individuals < minimumGroupSize):
-                    group1.add(offspring.reshape(1, *offspring.shape))
+                if isGroup1:
                     numGroup1 += 1
-                elif (not isGroup1) and (group2.individuals < minimumGroupSize):
-                    group2.add(offspring.reshape(1, *offspring.shape))
+                    if (group1.individuals is None) or (group1.individuals < minimumGroupSize):
+                        group1.add(offspring.reshape(1, *offspring.shape))
+                else:
                     numGroup2 += 1
+                    if (group2.individuals is None) or (group2.individuals < minimumGroupSize):
+                        group2.add(offspring.reshape(1, *offspring.shape))
             
-            # Re-load data to enable while loop check
+            # Raise an error if we failed to produce progeny for either group
+            if numGroup1 == 0 or numGroup2 == 0:
+                raise Exception(f"After simulating {batchSize} individuals, {numGroup1} had inherited the " +
+                                f"QTL combination '{combinationEvaluator.raw}' and were categorised into group1, with " +
+                                f"{numGroup2} lacking this QTL combination and hence being categorised into group2. " + 
+                                "Since one of these groups has 0 individuals, the QTL combination for one of these groups " +
+                                "may be virtually impossible to occur in a simulated individual. popquis will exit now to " +
+                                "prevent what might otherwise become an endless process. You should consider " + 
+                                "simplifying the QTL combination to avoid this issue.")
+            
+            # Provide some logging information
+            "This also helps to figure out what the inheritance ratio is for the QTL combination"
+            print(f"# Simulated a batch of {batchSize} individuals: {numGroup1} in group1 and {numGroup2} in group2")
+            
+            # Re-load data to enable checking of group size
             group1.load()
             group2.load()
     
     def __repr__(self):
-        return "<Breeder object;genomeMap={0};parent1Genome={1};parent2Genome={2}>".format(
+        return "<Breeder object;genomeMap={0};parent1={1};parent2={2}>".format(
             self.genomeMap,
-            self.parent1Genome,
-            self.parent2Genome
+            self.parent1,
+            self.parent2
         )

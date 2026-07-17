@@ -11,6 +11,7 @@ import unittest
 import numpy as np
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from modules.breeder import Breeder
 from modules.chromosome import Chromosome
 from modules.chromosomemap import ChromosomeMap
 from modules.combination import Combination
@@ -18,6 +19,7 @@ from modules.errors import InvalidGenotypeError, IncompatibleGenotypeError
 from modules.genome import Genome
 from modules.genomemap import GenomeMap
 from modules.genotype import Genotype # note that the Genotype class is implicitly tested by the TestParsing class herein
+from modules.locations import Locations
 from modules.parsing import parse_genotypes, parse_combination, parse_linkage, parse_qtl_encoding
 from modules.population import Population
 
@@ -448,7 +450,6 @@ class TestGenomeMap(unittest.TestCase):
             for _, chromRow in chromMap.df.iterrows():
                 genomeRow = genomeMap.df.iloc[ongoingCount]
                 assert genomeRow.equals(chromRow)
-                #self.assertTrue(genomeRow.equals(chromRow))
                 ongoingCount += 1
 
 class TestPopulation(unittest.TestCase):
@@ -473,8 +474,52 @@ class TestPopulation(unittest.TestCase):
         self.assertTrue(np.array_equal(individual1, retrieved1))
         self.assertTrue(np.array_equal(individual2, retrieved2))
         
-        # Clean-up
+        # Clean up
         os.unlink(tmpFile)
+
+class TestBreeder(unittest.TestCase):
+    def test_when_valid(self):
+        # Arrange
+        cmMbp = 3.0
+        genotype1 = [Genotype("0/0"), Genotype("0/1"), Genotype("0/1")] # parent1, parent2, offspring
+        positions = [0]
+        edgeBp = 50
+        positions = [ ("chr1", x + edgeBp) for x in positions ]
+        combinationEvaluator = Combination("1")
+        
+        os.makedirs(tmpDir, exist_ok=True)
+        locations = Locations(tmpDir)
+        
+        # Act & Assert (no error is a pass)
+        breeder = Breeder()
+        breeder.establish(positions, [genotype1], cmMbp,
+                          snpMbp=int(1e6), edgeBp=edgeBp)
+        breeder.produce_progeny(locations, combinationEvaluator, batchSize=100, minimumGroupSize=1, seed=1234)
+        
+        # Clean up
+        os.unlink(locations.group1Npy)
+        os.unlink(locations.group2Npy)
+    
+    def test_when_invalid(self):
+        # Arrange
+        cmMbp = 3.0
+        genotype1 = [Genotype("0/0"), Genotype("1/1"), Genotype("0/1")] # parent1, parent2, offspring
+        positions = [0]
+        edgeBp = 50
+        positions = [ ("chr1", x + edgeBp) for x in positions ]
+        combinationEvaluator = Combination("1")
+        
+        os.makedirs(tmpDir, exist_ok=True)
+        locations = Locations(tmpDir)
+        
+        # Act
+        breeder = Breeder()
+        breeder.establish(positions, [genotype1], cmMbp,
+                          snpMbp=int(1e6), edgeBp=edgeBp)
+        
+        # Assert
+        with self.assertRaises(Exception): # all offspring end up in group1 with none in group2
+            breeder.produce_progeny(locations, combinationEvaluator, batchSize=10, minimumGroupSize=1, seed=1234)
 
 if __name__ == '__main__':
     unittest.main()
