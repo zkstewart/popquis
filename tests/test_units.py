@@ -231,10 +231,10 @@ class TestCombinationEvaluation(unittest.TestCase):
         for combinationStr, evalStr in zip(combinationStrs, evalStrs):
             for qtlBoolCombo in qtlBoolCombos:
                 combination = Combination(combinationStr)
-                evaluatorResult = combination.evaluate({
-                    i+1:qtlBoolCombo[i] for i in range(len(qtlBoolCombo))
-                })
+                evaluatorResult = combination.evaluate(qtlBoolCombo)
                 evalStrResult = eval(evalStr.format(*qtlBoolCombo))
+                assert evaluatorResult == evalStrResult
+                
                 self.assertEqual(evaluatorResult, evalStrResult, 
                                  f"'{combinationStr}' gives inconsistent output")
     
@@ -247,26 +247,25 @@ class TestCombinationEvaluation(unittest.TestCase):
             "(1 OR 2 OR 3)",
             "((1 AND 2) OR 3)"
         ]
-        valueErrorDicts = [
-            {1: True, 2: True}, # too few numbers
-            {1: True, 2: True, 3: True, 4: True}, # too many numbers
-            {}, # empty dict
-            {2: True, 3: True, 4: True}, # mismatching numbers
-            {"1": True, "2": True, "3": True} # key type mismatch
+        valueErrorLists = [
+            [True, True], # too few numbers
+            [True, True, True, True], # too many numbers
+            [], # empty list
+            ["True", True, True] # object type mismatch
         ]
-        typeErrorDicts = [
-            [True, True, True] # object type mismatch
+        typeErrorLists = [
+            {1: True, 2: True, 3: True} # object type mismatch
         ]
         
         # Act & Assert in loop on errors
         for combinationStr in combinationStrs:
             combination = Combination(combinationStr)
-            for variableDict in valueErrorDicts:
+            for variables in valueErrorLists:
                 with self.assertRaises(ValueError):
-                    evaluatorResult = combination.evaluate(variableDict)
-            for variableDict in typeErrorDicts:
+                    evaluatorResult = combination.evaluate(variables)
+            for variables in typeErrorLists:
                 with self.assertRaises(TypeError):
-                    evaluatorResult = combination.evaluate(variableDict)
+                    evaluatorResult = combination.evaluate(variables)
 
 class TestChromosome(unittest.TestCase):
     def test_when_valid(self):
@@ -443,7 +442,8 @@ class TestGenomeMap(unittest.TestCase):
         for chromMap in (chromMap1, chromMap2, chromMap3):
             for _, chromRow in chromMap.df.iterrows():
                 genomeRow = genomeMap.df.iloc[ongoingCount]
-                self.assertTrue(genomeRow.equals(chromRow))
+                assert genomeRow.equals(chromRow)
+                #self.assertTrue(genomeRow.equals(chromRow))
                 ongoingCount += 1
 
 if __name__ == '__main__':

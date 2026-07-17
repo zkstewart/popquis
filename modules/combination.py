@@ -5,13 +5,14 @@
 
 import ast
 
+from copy import deepcopy
+
 class Combination:
     '''
-    Properties:
+    Attributes:
         raw -- the original string used to instantiate a Combination object
         interpreted -- a string representation of how ast interpreted the original raw string
-        tree -- an ast object obtained by ast.parse(raw, mode='eval')
-        numbers -- a list of integers representing the node labels that can be substituted
+        numbers -- a list of integers representing the QTL positions that can be substituted
                    when evaluating a combination of booleans
         isCombination -- a boolean flag for object type validation
     Methods:
@@ -21,15 +22,8 @@ class Combination:
     
     def __init__(self, value):
         self.raw = value
-        self.tree = value
         self.isCombination = True # object type validator
-    
-    @property
-    def tree(self):
-        return self._tree
-    
-    @tree.setter
-    def tree(self, value):
+        
         # Immediately reject empty values
         if value.strip() == "":
             raise ValueError(f"Combination string is empty and cannot be interpreted.")
@@ -86,47 +80,36 @@ class Combination:
         
         # Load combination with ast library interpretation
         try:
-            self._tree = ast.parse(" ".join(substitution), mode="eval")
+            tree = ast.parse(" ".join(substitution), mode="eval")
         except:
             raise SyntaxError(f"Syntax of combination string '{value}' was not understood by the Python ast library. " +
                               "Double check that your input is formatted according to popquis expectations.")
-    
-    @property
-    def numbers(self):
-        return self._numbers
-    
-    @numbers.setter
-    def numbers(self, value):
-        self._numbers = value
-    
-    @property
-    def interpreted(self):
-        return ast.unparse(self.tree)
-    
-    def evaluate(self, variableDict):
-        # Validate variableDict type
-        if not isinstance(variableDict, dict):
-            raise TypeError("Combination.evaluate must receive a dict, not " + 
-                            f"'{type(variableDict).__name__}'")
         
-        # Validate variableDict compatibility
-        if len(variableDict) == 0:
-            raise ValueError("The dictionary provided for evaluation appears to be empty.")
-        if not all([ x in variableDict for x in self.numbers ]):
-            raise ValueError(f"All variable numbers in this Combination object ({self.numbers}) " +
-                             f"must be found within the variableDict provided for evaluation " + 
-                             f"({variableDict.keys()})")
-        if any([ x not in self.numbers for x in variableDict.keys() ]):
-            raise ValueError(f"There is a mismatch between the variable keys found within the dictionary " +
-                             f"provided for evaluation ({variableDict.keys()}) and the Combination " + 
-                             f"object ({self.numbers})")
+        # Unparse the interpreted expression
+        self.interpreted = ast.unparse(tree)
         
-        # Substitute variableDict number keys with qtl variable identifiers
-        qtlVariableDict = { f"qtl{key}":value for key, value in variableDict.items() }
+        # Convert expression into a format string for easier variable substitution
+        self._formatString = self.interpreted
+        for number in self.numbers[::-1]:
+            self._formatString = self._formatString.replace(f"qtl{number}", "{}")
+    
+    def evaluate(self, variables):
+        # Validate variables type
+        if not (isinstance(variables, list) or isinstance(variables, tuple)):
+            raise TypeError("Combination.evaluate must receive a list or tuple, not " + 
+                            f"'{type(variables).__name__}'")
         
-        # Perform variable substitution and return the combination evaluation
-        expressionTree = CombinationEvaluator(qtlVariableDict)
-        expressionString = ast.unparse(expressionTree.visit(self.tree))
+        # Validate variables compatibility
+        if len(variables) == 0:
+            raise ValueError("The list provided for evaluation appears to be empty.")
+        elif len(variables) != len(self.numbers):
+            raise ValueError("The list provided for evaluation has a different number of QTLs " + 
+                             f"({len(variables)}) to what is expected ({len(self.numbers)})")
+        if not all([ isinstance(x, bool) for x in variables ]):
+            raise ValueError("The list provided for evaluation must contain bool objects")
+        
+        # Format and evaluate the expression
+        expressionString = self._formatString.format(*variables)
         return eval(expressionString)
     
     def __repr__(self):
@@ -134,19 +117,4 @@ class Combination:
             self.raw,
             self.interpreted,
             self.numbers
-        )
-
-class CombinationEvaluator(ast.NodeTransformer):
-    def __init__(self, variableDict):
-        self.variableDict = variableDict
-        super().__init__()
-    
-    def visit_Name(self, node):
-        if node.id in self.variableDict:
-            return ast.Constant(value=self.variableDict[node.id])
-        return node
-    
-    def __repr__(self):
-        return "<CombinationEvaluator object;variableDict='{0}'>".format(
-            self.variableDict
         )

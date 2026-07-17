@@ -32,6 +32,7 @@ class GenomeMap:
             self.df = chromMapObj.df.copy()
         else:
             self.df = pd.concat((self.df, chromMapObj.df))
+            self.df.reset_index(drop=True, inplace=True)
         self.chromIDs.add(chromMapObj.chromID)
     
     def __repr__(self):
