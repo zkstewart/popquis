@@ -22,6 +22,8 @@ from modules.genotype import Genotype # note that the Genotype class is implicit
 from modules.locations import Locations
 from modules.parsing import parse_genotypes, parse_combination, parse_linkage, parse_qtl_encoding
 from modules.population import Population
+from modules.simulation import Configuration, Coordinator
+from modules.statistics import RandomNumberGenerator, Calculator
 
 # Specify data locations
 testDir = os.path.dirname(os.path.abspath(__file__))
@@ -520,6 +522,133 @@ class TestBreeder(unittest.TestCase):
         # Assert
         with self.assertRaises(Exception): # all offspring end up in group1 with none in group2
             breeder.produce_progeny(locations, combinationEvaluator, batchSize=10, minimumGroupSize=1, seed=1234)
+
+class TestConfiguration(unittest.TestCase):
+    def test_when_valid(self):
+        # Arrange
+        popSize1 = 100
+        popSize2 = 1000
+        popSize3 = 19 # small-size prime number
+        popSize4 = 127 # medium-size prime number
+        popSize5 = 953 # large-size prime number
+        popSize6 = 7919 # very large-size prime number
+        
+        # Act
+        config1 = Configuration(popSize1)
+        config2 = Configuration(popSize2)
+        config3 = Configuration(popSize3)
+        config4 = Configuration(popSize4)
+        config5 = Configuration(popSize5)
+        config6 = Configuration(popSize6)
+        
+        # Assert
+        ## TBD
+    
+    def test_when_invalid(self):
+        # Arrange
+        popSize1 = 104.5
+        popSize2 = 4
+        
+        # Act & Assert on errors
+        with self.assertRaises(TypeError): # value is not an integer
+            config1 = Configuration(popSize1)
+        with self.assertRaises(ValueError): # value is less than 10
+            config2 = Configuration(popSize2)
+
+class TestCoordinator(unittest.TestCase):
+    def test_when_valid(self):
+        # Arrange
+        os.makedirs(tmpDir, exist_ok=True)
+        locations = Locations(tmpDir)
+        
+        # Act
+        # Assert
+    
+    def test_when_invalid(self):
+        # Arrange
+        os.makedirs(tmpDir, exist_ok=True)
+        locations = Locations(tmpDir)
+        
+        # Act
+        # Assert
+
+class TestStatistics(unittest.TestCase):
+    def test_when_valid(self):
+        # Arrange
+        # Act
+        # Assert
+        pass
+    
+    def test_when_invalid(self):
+        # Arrange
+        # Act
+        # Assert
+        pass
+
+class TestSpreadsheet(unittest.TestCase):
+    def test_when_valid(self):
+        # Arrange
+        # Act
+        # Assert
+        pass
+    
+    def test_when_invalid(self):
+        # Arrange
+        # Act
+        # Assert
+        pass
+
+class TestRandomNumberGenerator(unittest.TestCase):
+    def test_when_valid(self):
+        # Arrange
+        # Act
+        # Assert
+        pass
+    
+    def test_when_invalid(self):
+        # Arrange
+        # Act
+        # Assert
+        pass
+
+class TestCalculatorCounter(unittest.TestCase):
+    def test_when_valid(self):
+        # Arrange
+        # Act
+        # Assert
+        pass
+    
+    def test_when_invalid(self):
+        # Arrange
+        # Act
+        # Assert
+        pass
+
+class TestCalculatorEuclideanDistance(unittest.TestCase):
+    def test_when_valid(self):
+        # Arrange
+        # Act
+        # Assert
+        pass
+    
+    def test_when_invalid(self):
+        # Arrange
+        # Act
+        # Assert
+        pass
+
+class TestCalculatorRsquared(unittest.TestCase):
+    def test_when_valid(self):
+        # Arrange
+        # Act
+        # Assert
+        pass
+    
+    def test_when_invalid(self):
+        # Arrange
+        # Act
+        # Assert
+        pass
 
 if __name__ == '__main__':
     unittest.main()

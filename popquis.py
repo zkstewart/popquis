@@ -8,12 +8,20 @@ import os
 import sys
 import argparse
 
-from itertools import product
-
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from modules.validation import validate_args, validate_breeding_population
-from modules.parsing import parse_qtl_encoding
 from modules.breeder import Breeder
+from modules.parsing import parse_qtl_encoding
+from modules.simulation import Configuration, Coordinator
+from modules.validation import validate_args, validate_breeding_population
+
+def task_manager(group1NpyFile, group2NpyFile, group1Size, group2Size, numGroup1Errors, numGroup2Errors, seed):
+    coordinator = Coordinator(group1NpyFile, group2NpyFile, group1Size, group2Size,
+                              numGroup1Errors, numGroup2Errors, seed=seed)
+    
+    
+    ## Interpolate statistics across gaps in population size
+    
+    
 
 def main():
     usage = """%(prog)s simulates a biparental segregating population with configurable
@@ -81,6 +89,12 @@ def main():
                    help="""Optionally, specify the number of simulated individuals
                    to assess (default=1000)""",
                    default=1000)
+    p.add_argument("--bootstraps", dest="bootstraps",
+                   required=False,
+                   type=int,
+                   help="""Optionally, specify the number of bootstrap replications
+                   to run (default=1000)""",
+                   default=1000)
     p.add_argument("--weak", dest="weakDistance",
                    required=False,
                    type=int,
@@ -110,44 +124,24 @@ def main():
     args.ploidy = genotypes[0][0].ploidy # all genotypes are validated to be equal, so just grab first
     
     # Produce the breeding population
+    "This populates the locations.group1Npy and locations.group2Npy files with simulated individuals"
     breeder = Breeder()
     breeder.establish(positions, genotypes, args.cmMbp)
-    breeder.produce_progeny(args.locations, combinationEvaluator, minimumGroupSize=10000, seed=1234)
+    breeder.produce_progeny(args.locations, combinationEvaluator,
+                            minimumGroupSize=10000, seed=1234)
     
     # Make sure that the simulated populations are consistent with program parameters
     "This check should catch any unusual occurrence where popquis has been run multiple times with different settings"
     validate_breeding_population(args.locations)
     
-    # Establish simulation variable combinations that produce non-fractional size segregant groups
-    STEPSIZE = 5
-    populationBalance = [ x/100 for x in range(10, 60, 10) ]
-    phenotypeError = [ x/100 for x in range(0, 60, 10) ]
-    combos = { x: [] for x in product(populationBalance, phenotypeError) }
-    for key, sizeList in combos.items():
-        balance, error = key
-        for size in range(STEPSIZE, args.popSize+STEPSIZE, STEPSIZE):
-            # Check if groups can be segregated into balanced groups
-            numGroup1 = size * balance
-            if numGroup1 % 1 != 0: # if group1 is a whole number, group2 is as well
-                continue
-            
-            # Check if each group can be mixed with a whole-numbered amount of errors
-            numGroup1 = int(numGroup1)
-            numGroup2 = size - numGroup1
-            if (numGroup1 * error % 1 != 0) or (numGroup2 * error % 1 != 0):
-                continue
-            
-            sizeList.append(size)
-    
-    # Thin down any combinations that are excessive
-    ## TBD
+    # Establish simulation variable combinations
+    configuration = Configuration(args.popSize)
     
     # Evaluate each variable combination for their segregation statistics
-    ## Iterate through each combination
-    ## Multiprocessing of bootstrapped replication
-    ## Calculate ED^4
-    ## Calculate R^2
-    ## Interpolate statistics across gaps in population size
+    coordinator = Coordinator(args.locations)
+    coordinator.run(configuration, args.threads, bootstraps=args.bootstraps)
+    
+    
     ## Summarise replicated statistics through the signal strength value
     ## Produce replicate plot (many opaque lines) of the R^2 values for QC/verification of simulation outcomes
     

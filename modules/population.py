@@ -4,57 +4,32 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import os
+import sys
 
 import numpy as np
 
-from npy_append_array import NpyAppendArray
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from modules.appendarray import AppendArray
 
-class Population:
+class Population(AppendArray):
     '''
-    Wrapper around the npy-append-array functionalities to allow for progressive growth
-    of a population of simulated individuals without memory limitation and with later
-    memory mapped access to individuals.
+    Implementation of AppendArray to allow for progressive growth of a population of
+    simulated individuals without memory limitation and with later memory mapped
+    access to the array of individuals.
     
+    Args:
+        fileName -- a string indicating the location of a pre-existing npy file,
+                    or to a location that is writeable to create a new npy file
     Attributes:
         data -- None, or after using self.load(), a memory-mapped npy file handle
     Methods:
-        store -- stores an array
+        store -- stores an array of an individual's simulated variant genotypes
         load -- memory maps the npy file to enable retrieval of stored arrays
         retrieve -- extracts stored arrays by their index
     '''
     def __init__(self, fileName):
-        self.fileName = fileName
-        self.data = None
+        super().__init__(fileName)
         self.isPopulation = True # object type validator
-    
-    @property
-    def fileName(self):
-        return self._fileName
-    
-    @fileName.setter
-    def fileName(self, value):
-        if not isinstance(value, str):
-            raise TypeError(f"Population object expects fileName to be a str, not '{type(value).__name__}'")
-        
-        value = os.path.abspath(value)
-        if os.path.isfile(value):
-            pass
-        elif os.path.exists(value):
-            raise FileNotFoundError(f"Population object was given the fileName '{value}' which appears to " +
-                                    "exist but not be a file? Move or rename whatever resides here and try again.")
-        else:
-            parentDir = os.path.dirname(value)
-            if os.path.isdir(parentDir):
-                pass
-            elif not os.path.exists(parentDir):
-                raise NotADirectoryError(f"Population object cannot create fileName '{value}' since its parent " +
-                                         f"location '{parentDir}' does not exist. Create this location first.")
-            else:
-                raise NotADirectoryError(f"Population object cannot create fileName '{value}' since its parent " +
-                                         f"location '{parentDir}' is not a directory? Move or rename whatever " +
-                                         "resides here, create the parent location as a directory, then try again.")
-        
-        self._fileName = value
     
     @property
     def individuals(self):
@@ -77,24 +52,6 @@ class Population:
         _, _, ploidy = self.shape
         return ploidy
     
-    @property
-    def shape(self):
-        if self.data is None:
-            return None
-        return self.data.shape
-    
-    def add(self, array):
-        '''
-        Parameters:
-            array -- an array representing one simulated individual
-        '''
-        with NpyAppendArray(self.fileName, delete_if_exists=False) as npaa:
-            npaa.append(array)
-    
-    def load(self):
-        if os.path.isfile(self.fileName):
-            self.data = np.load(self.fileName, mmap_mode="r")
-    
     def retrieve(self, indices):
         '''
         Parameters:
@@ -105,8 +62,13 @@ class Population:
         '''
         if self.data is None:
             raise ValueError("Population must be loaded before .retrieve is functional")
-        if not (isinstance(indices, list) or isinstance(indices, tuple)):
-            raise TypeError(f"Population can only receive a list or tuple, not '{type(indices).__name__}'")
+        try:
+            for value in indices:
+                int(value)
+                break
+        except:
+            raise TypeError("Input to Population.retrieve() must be an iterable of integer-convertible values")
+        
         return np.stack(self.data[indices])
     
     def __repr__(self):
