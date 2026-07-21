@@ -14,15 +14,6 @@ from modules.parsing import parse_qtl_encoding
 from modules.simulation import Configuration, Coordinator
 from modules.validation import validate_args, validate_breeding_population
 
-def task_manager(group1NpyFile, group2NpyFile, group1Size, group2Size, numGroup1Errors, numGroup2Errors, seed):
-    coordinator = Coordinator(group1NpyFile, group2NpyFile, group1Size, group2Size,
-                              numGroup1Errors, numGroup2Errors, seed=seed)
-    
-    
-    ## Interpolate statistics across gaps in population size
-    
-    
-
 def main():
     usage = """%(prog)s simulates a biparental segregating population with configurable
     QTL occurrence, to estimate the approximate population size needed for a successful
@@ -140,7 +131,6 @@ def main():
     # Evaluate each variable combination for their segregation statistics
     coordinator = Coordinator(args.locations)
     coordinator.run(configuration, args.threads, bootstraps=args.bootstraps)
-    
     
     ## Summarise replicated statistics through the signal strength value
     ## Produce replicate plot (many opaque lines) of the R^2 values for QC/verification of simulation outcomes

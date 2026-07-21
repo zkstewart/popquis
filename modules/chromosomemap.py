@@ -7,12 +7,13 @@ import pandas as pd
 
 class ChromosomeMap:
     '''
-    Properties:
+    Args:
         chromID -- a string identifying the chromosome.
         length -- an integer value giving the chromosome length in bp.
         cmMbp -- a float value giving the centiMorgan per Mbp.
         snpMbp -- an integer giving the approximate number of SNPs to be spaced evenly
                  across each Mbp of genome length; default is 1000.
+    Properties:
         df -- a pandas DataFrame suitable for chromax handling.
     Methods:
         generate -- uses parameter values to produce the internal DataFrame.

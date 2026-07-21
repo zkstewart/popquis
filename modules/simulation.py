@@ -13,7 +13,6 @@ from modules.statistics import Calculator, RandomNumberGenerator
 
 class Configuration:
     '''
-    
     Args:
         popSize -- an integer giving the maximum population size to generate simulation
                    configurations for
@@ -22,7 +21,37 @@ class Configuration:
         phenotypeError -- a list of integers: [0, 10, 20, 30, 40, 50]
         combos -- a dictionary where keys are tuples as: (balance, error)
                   and values are lists of integers giving population size increments
+    Methods:
+        get_variable_combinations -- called on object initialisation to set self.combos
     '''
+    POPMIN = 10
+    
+    @staticmethod
+    def downsize_popsize_increments(popSize, variableList):
+        '''
+        Reduces the number of variable combinations to limit simulation computational burden.
+        Operates under a scale akin to:
+            popSize == 10 means we want at most 10 variables
+            popSize == 100 means we want at most 20 variables
+            popSize == 1000 means we want at most 40 variables
+        And so on. Each 10x increase in popSize leads to a 2x increase in the target number
+        of variables.
+        
+        Parameters:
+            popSize -- an integer giving the maximum popSize
+            variableList -- a list containing values as part of the variable combinations
+        Returns:
+            array -- a numpy array with potential subsetting of the original input list if
+                     its length exceeded a threshold
+        '''
+        DOWNSIZE_BASE = 10
+        
+        target = np.ceil(DOWNSIZE_BASE * np.power(2, np.log10(popSize)-1)).astype(int)
+        if len(variableList) > target:
+            return np.array([ variableList[i] for i in Calculator.evenly_spaced_sampling(len(variableList), target) ])
+        else:
+            return np.array(variableList)
+    
     def __init__(self, popSize):
         self.popSize = popSize
         self.popBalance = [ x/100 for x in range(10, 60, 10) ] # [10, 20, 30, 40, 50]
@@ -37,23 +66,17 @@ class Configuration:
     def popSize(self, value):
         if not isinstance(value, int):
             raise TypeError(f"popSize must be an int, not '{type(value).__name__}'")
-        if value < 10:
-            raise ValueError("popSize should be 10 or more, in order to provide meaningful data")
+        if value < Configuration.POPMIN:
+            raise ValueError(f"popSize should be {Configuration.POPMIN} or more, in order to provide meaningful data")
         
         self._popSize = value
     
     def get_variable_combinations(self):
-        STEPSIZE = 5
-        HEURISTIC_MIN = 10
-        HEURISTIC_SCALE = 0.05
-        DOWNSIZE_MIN = 2 # half of size
-        DOWNSIZE_MAX = 4 # quarter of size
-        
         # Obtain a full list of variable combinations with non-fractional pop. sizes
         combos = { x: [] for x in product(self.popBalance, self.phenotypeError) }
         for key, sizeList in combos.items():
             balance, error = key
-            for size in range(STEPSIZE, self.popSize+STEPSIZE, STEPSIZE):
+            for size in range(Configuration.POPMIN, self.popSize+1):
                 # Check if groups can be segregated into balanced groups
                 numGroup1 = size * balance
                 if numGroup1 % 1 != 0: # if group1 is a whole number, group2 is as well
@@ -71,20 +94,7 @@ class Configuration:
         "Depending on the efficiency of downstream steps, this may be removed"
         self.combos = {}
         for key in combos.keys():
-            rawValue = combos[key]
-            if (len(rawValue) > HEURISTIC_MIN) and (len(rawValue) > (len(rawValue) * HEURISTIC_SCALE)):
-                stored = False
-                for downsize in range(DOWNSIZE_MIN, DOWNSIZE_MAX+1):
-                    if len(rawValue) % downsize == 0:
-                        self.combos[key] = [ rawValue[i] for i in range(0, len(rawValue), downsize)]
-                        if self.combos[key][-1] != rawValue[-1]: # make sure it has the first and last values
-                            self.combos[key].append(rawValue[-1])
-                        stored = True
-                        break
-                if not stored: # unable to downsize
-                    self.combos[key] = rawValue
-            else:
-                self.combos[key] = rawValue
+            self.combos[key] = Configuration.downsize_popsize_increments(self.popSize, combos[key])
         
         # Change the data type of the popSize lists to be numpy arrays
         for key in self.combos.keys():
@@ -106,12 +116,14 @@ class Coordinator:
     
     Args:
         locations -- a Locations object with attributes including those detailed below.
-
     Attributes:
         group1Npy -- string pointing to a memory-mappable numpy file containing an array with
                      shape (num_individuals, num_genotypes, ploidy)
         group2Npy -- as per group1Npy but for the group2 Population
         storageDir -- a string pointing to the location where .npy files reside
+    Methods:
+        run -- pipeline function for multithreaded analysis of the simulated populations
+        analyse_population_segregation -- thread worker function called by run()
     '''
     def __init__(self, locations):
         self.group1Npy = locations.group1Npy
@@ -127,7 +139,7 @@ class Coordinator:
         if not isinstance(value, str):
             raise TypeError(f"group1Npy must be a str, not '{type(value).__name__}'")
         if not os.path.isfile(value):
-            raise ValueError(f"Coordinator expected group1Npy to be a file at '{value}'")
+            raise FileNotFoundError(f"Coordinator expected group1Npy to be a file at '{value}'")
         
         self._group1Npy = value
     
@@ -140,7 +152,7 @@ class Coordinator:
         if not isinstance(value, str):
             raise TypeError(f"group2Npy must be a str, not '{type(value).__name__}'")
         if not os.path.isfile(value):
-            raise ValueError(f"Coordinator expected group2Npy to be a file at '{value}'")
+            raise FileNotFoundError(f"Coordinator expected group2Npy to be a file at '{value}'")
         
         self._group2Npy = value
     
@@ -192,8 +204,13 @@ class Coordinator:
                         futures.append(future)
                 
                 # Extract and join resulting arrays
-                resultsArray = np.stack([ x.result() for x in futures ]) # shape = (popSize*bootstraps, numVariants)
-                resultsArray = np.stack(np.split(resultsArray, len(popSizes))) # shape = (popsize, bootstraps, numVariants)
+                if len(futures) != 0:
+                    resultsArray = np.stack([ x.result() for x in futures ]) # shape = (popSize*bootstraps, numVariants)
+                    resultsArray = np.stack(np.split(resultsArray, len(popSizes))) # shape = (popsize, bootstraps, numVariants)
+                else:
+                    if len(popSizes) != 0:
+                        raise Exception("Coordinator failed as futures list is empty but popSizes is not empty")
+                    resultsArray = None
                 
                 # Store results in Spreadsheet
                 spreadsheet.array = resultsArray

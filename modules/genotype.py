@@ -13,8 +13,10 @@ from modules.errors import InvalidGenotypeError, IncompatibleGenotypeError
 
 class Genotype:
     '''
+    Args:
+        raw -- the original string used to instantiate a Genotype object; expected to be in VCF
+               style GT format like "0/0" or "0/1" or "0/1/1" i.e., it tolerates arbitrary ploidy levels
     Properties:
-        raw -- the original string used to instantiate a Genotype object
         alleles -- a list of integers representing the alleles that compose this genotype
         unique -- returns set(alleles) for easier handling of the unique alleles that compose this genotype
         ploidy -- returns len(alleles) which indicates the ploidy of this genotype

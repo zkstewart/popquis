@@ -19,6 +19,7 @@ class AppendArray:
                     or to a location that is writeable to create a new npy file
     Attributes:
         data -- None, or after using self.load(), a memory-mapped npy file handle
+        shape -- None, or after using self.load(), the underlying numpy array's shape
     Methods:
         store -- stores an array
         load -- memory maps the npy file to enable retrieval of stored arrays
@@ -72,5 +73,8 @@ class AppendArray:
             npaa.append(array)
     
     def load(self):
-        if os.path.isfile(self.fileName):
-            self.data = np.load(self.fileName, mmap_mode="r")
+        try:
+            if os.path.isfile(self.fileName):
+                self.data = np.load(self.fileName, mmap_mode="r")
+        except EOFError:
+            raise EOFError(f"Could not load '{self.fileName}'; the file may be empty and needs to be deleted")

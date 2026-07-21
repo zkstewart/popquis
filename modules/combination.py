@@ -9,8 +9,10 @@ from copy import deepcopy
 
 class Combination:
     '''
+    Args:
+        raw -- a string used to instantiate a Combination object; expected to be akin to
+               "1 AND (2 OR 3)" or for a single QTL, just "1"
     Attributes:
-        raw -- the original string used to instantiate a Combination object
         interpreted -- a string representation of how ast interpreted the original raw string
         numbers -- a list of integers representing the QTL positions that can be substituted
                    when evaluating a combination of booleans

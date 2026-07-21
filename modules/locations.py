@@ -1,11 +1,27 @@
 import os
 
 class Locations:
+    '''
+    Args:
+        workingDirectory -- a string indicating the location where popquis temporary and output
+                            files are to be written
+    Attributes:
+        storageDir -- a string indicating the subdirectory where data storage files e.g., .npz and
+                      .npy files, are to be written
+        group1Npy -- a string giving the full location of the group1.npy file
+        group2Npy -- as above but for group2
+    Methods:
+        init_dirs -- pipeline function which calls make_workdir() and make_subdir() in sequence to
+                     set up a popquis analysis folder
+        make_workdir -- creates the workingDirectory folder with appropriate validations
+        make_subdir -- creates a subdirectory under workingDirectory based on an attribute stored
+                       by this Location object
+    '''
     OKAY_SUFFIX = ".ok"
     
-    def __init__(self, workingDirectory):
+    def __init__(self, workingDirectory, quiet=True):
         self.workingDirectory = workingDirectory
-        self.init_dirs()
+        self.init_dirs(quiet=quiet)
     
     @property
     def workingDirectory(self):
@@ -31,13 +47,14 @@ class Locations:
         return os.path.join(self.storageDir, "group2.npy")
     
     # Methods
-    def init_dirs(self):
-        self.make_workdir()
+    def init_dirs(self, quiet=True):
+        self.make_workdir(quiet=quiet)
         self.make_subdir("storageDir")
     
-    def make_workdir(self):
+    def make_workdir(self, quiet=True):
         if os.path.isdir(self.workingDirectory):
-            print(f"# -o location already exists; will attempt to resume a previous run")
+            if not quiet:
+                print(f"# -o location already exists; will attempt to resume a previous run")
         elif not os.path.exists(self.workingDirectory):
             parentDir = os.path.dirname(self.workingDirectory)
             if not os.path.isdir(parentDir):
@@ -45,7 +62,8 @@ class Locations:
                                          f"location '{parentDir}' is not a directory or does not exist.")
             else:
                 os.mkdir(self.workingDirectory)
-                print(f"# Created output directory '{self.workingDirectory}' as part of argument validation")
+                if not quiet:
+                    print(f"# Created output directory '{self.workingDirectory}' as part of argument validation")
         else:
             raise NotADirectoryError(f"-o location already exists, but is not a directory. Try to " +
                                      "specify a different location instead")

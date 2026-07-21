@@ -74,6 +74,8 @@ def parse_linkage(linkageList, weakDistance, moderateDistance, strongDistance, n
         weak/moderate/strongDistance -- integer values providing the basepairs distance that each
                                         linkage value should correspond to; 'none' signals a new
                                         chromosome and does not need a basepairs value.
+        numQTLs -- an integer giving the number of QTLs being assessed; used for validation that
+                   the length of the linkage list is numQTLs - 1
     '''
     if len(linkageList) != numQTLs-1:
         raise ValueError(f"{numQTLs} values were given to -q, which means we expect {numQTLs-1} " +

@@ -23,11 +23,29 @@ from modules.locations import Locations
 from modules.parsing import parse_genotypes, parse_combination, parse_linkage, parse_qtl_encoding
 from modules.population import Population
 from modules.simulation import Configuration, Coordinator
+from modules.spreadsheet import Spreadsheet
 from modules.statistics import RandomNumberGenerator, Calculator
 
 # Specify data locations
+__file__ = "/mnt/c/git/popquis/tests/test_units.py"
 testDir = os.path.dirname(os.path.abspath(__file__))
 tmpDir = os.path.join(testDir, "tmp")
+
+# Define initial clean up function
+def cleanup():
+    os.makedirs(tmpDir, exist_ok=True)
+    locations = Locations(tmpDir)
+    if os.path.isfile(locations.group1Npy):
+        os.unlink(locations.group1Npy)
+    if os.path.isfile(locations.group2Npy):
+        os.unlink(locations.group2Npy)
+    
+    dummyConfig = Configuration(100)
+    for b in dummyConfig.popBalance:
+        for p in dummyConfig.phenotypeError:
+            npzFile = os.path.join(locations.storageDir, f"{b}_{p}.npz")
+            if os.path.isfile(npzFile):
+                os.unlink(npzFile)
 
 # Define unit tests
 class TestParsing(unittest.TestCase):
@@ -479,6 +497,20 @@ class TestPopulation(unittest.TestCase):
         # Clean up
         os.unlink(tmpFile)
 
+    def test_when_invalid(self):
+         # Arrange
+        os.makedirs(tmpDir, exist_ok=True)
+        tmpFile = os.path.join(tmpDir, "tmp.npy")
+        
+        # Act & Assert on error
+        open(tmpFile, "w").close()
+        pop = Population(tmpFile)
+        with self.assertRaises(EOFError):
+            pop.load()
+        
+        # Clean up
+        os.unlink(tmpFile)
+
 class TestBreeder(unittest.TestCase):
     def test_when_valid(self):
         # Arrange
@@ -525,6 +557,7 @@ class TestBreeder(unittest.TestCase):
 
 class TestConfiguration(unittest.TestCase):
     def test_when_valid(self):
+        "It's kind of hard to test this Class meaningfully"
         # Arrange
         popSize1 = 100
         popSize2 = 1000
@@ -541,8 +574,19 @@ class TestConfiguration(unittest.TestCase):
         config5 = Configuration(popSize5)
         config6 = Configuration(popSize6)
         
+        expectedKeys = set([
+            (b, p)
+            for b in config1.popBalance
+            for p in config1.phenotypeError
+        ])
+        
         # Assert
-        ## TBD
+        self.assertEqual(set(config1.combos.keys()), expectedKeys)
+        self.assertEqual(set(config2.combos.keys()), expectedKeys)
+        self.assertEqual(set(config3.combos.keys()), expectedKeys)
+        self.assertEqual(set(config4.combos.keys()), expectedKeys)
+        self.assertEqual(set(config5.combos.keys()), expectedKeys)
+        self.assertEqual(set(config6.combos.keys()), expectedKeys)
     
     def test_when_invalid(self):
         # Arrange
@@ -560,82 +604,242 @@ class TestCoordinator(unittest.TestCase):
         # Arrange
         os.makedirs(tmpDir, exist_ok=True)
         locations = Locations(tmpDir)
+        open(locations.group1Npy, "w").close()
+        open(locations.group2Npy, "w").close()
+        
+        # Act & Assert (no error is a pass)
+        coordinator = Coordinator(locations)
+    
+    def test_array_shape(self):
+        "The Coordinator class forms a combined array of many results; understanding its shape is necessary to parse results back out of the array"
+        # Arrange
+        numVariants = 15
+        array1 = np.array([1] * numVariants)
+        array2 = np.array([2] * numVariants)
+        array3 = np.array([3] * numVariants)
+        array4 = np.array([4] * numVariants)
+        bootstraps = 10
+        
+        expectedShape = (4, bootstraps, numVariants) # (popsize, bootstraps, numVariants)
         
         # Act
+        futures = []
+        for array in [array1, array2, array3, array4]:
+            for replication in range(bootstraps):
+                futures.append(array)
+        
+        resultsArray = np.stack(futures)
+        resultsArray = np.stack(np.split(resultsArray, 4)) # len(popSizes) == 4 as each popSize has its own array
+        
         # Assert
+        self.assertEqual(resultsArray.shape, expectedShape)
+        self.assertEqual(np.sum(resultsArray[0]), bootstraps * numVariants * 1)
+        self.assertEqual(np.sum(resultsArray[1]), bootstraps * numVariants * 2)
+        self.assertEqual(np.sum(resultsArray[2]), bootstraps * numVariants * 3)
+        self.assertEqual(np.sum(resultsArray[3]), bootstraps * numVariants * 4)
+    
+    def test_run(self):
+        # Arrange
+        os.makedirs(tmpDir, exist_ok=True)
+        locations = Locations(tmpDir)
+        
+        chromID = "chr1"
+        positions = [(chromID, 50), (chromID, 100), (chromID, 150)]
+        cmMbp = 1
+        snpMbp = int(1e6)
+        edgeBp = 50
+        popSize = 50
+        genotypes = [[Genotype("0/1"), Genotype("0/1"), Genotype("1/1")]]*3
+        combinationEvaluator = Combination("1 AND 2 AND 3")
+        
+        breeder = Breeder()
+        breeder.establish(positions, genotypes, cmMbp, snpMbp=snpMbp, edgeBp=edgeBp)
+        breeder.produce_progeny(locations, combinationEvaluator, batchSize=100,
+                                minimumGroupSize=10, seed=1234)
+        
+        configuration = Configuration(popSize)
+        chosenBalance, chosenError = (0.5, 0.0)
+        chosenPopsize = configuration.combos[(chosenBalance, chosenError)]
+        
+        threads = 1
+        bootstraps = 10
+        
+        expectedShape = (len(chosenPopsize), bootstraps, len(breeder.genomeMap.df)) # (popsize, bootstraps, numVariants)
+        
+        # Act
+        coordinator = Coordinator(locations)
+        coordinator.run(configuration, threads, bootstraps=bootstraps)
+        chosenSpreadsheet = Spreadsheet(locations.storageDir, chosenBalance, chosenError, chosenPopsize)
+        chosenSpreadsheet.load()
+        
+        # Assert
+        self.assertEqual(chosenSpreadsheet.shape, expectedShape)
+        
+        # Clean up
+        os.unlink(locations.group1Npy)
+        os.unlink(locations.group2Npy)
     
     def test_when_invalid(self):
         # Arrange
         os.makedirs(tmpDir, exist_ok=True)
         locations = Locations(tmpDir)
         
-        # Act
-        # Assert
+        # Act & Assert on error
+        with self.assertRaises(FileNotFoundError): # npy files don't exist
+            coordinator = Coordinator(locations)
 
-class TestStatistics(unittest.TestCase):
-    def test_when_valid(self):
-        # Arrange
-        # Act
-        # Assert
-        pass
-    
-    def test_when_invalid(self):
-        # Arrange
-        # Act
-        # Assert
-        pass
-
-class TestSpreadsheet(unittest.TestCase):
-    def test_when_valid(self):
-        # Arrange
-        # Act
-        # Assert
-        pass
-    
-    def test_when_invalid(self):
-        # Arrange
-        # Act
-        # Assert
-        pass
+# 'class TestSpreadsheet(unittest.TestCase) when valid' is tested implicitly by TestCoordinator
 
 class TestRandomNumberGenerator(unittest.TestCase):
     def test_when_valid(self):
         # Arrange
+        seed1 = 1234
+        seed2 = 1122
+        
+        rangeMax = 100
+        numberOfIndices = 10
+        
+        gen1 = RandomNumberGenerator(seed1)
+        gen2 = RandomNumberGenerator(seed1)
+        gen3 = RandomNumberGenerator(seed2)
+        
         # Act
+        indices1 = gen1.generate_random_indices(rangeMax, numberOfIndices)
+        indices2 = gen2.generate_random_indices(rangeMax, numberOfIndices) # RNG with same seed should be same output
+        indices3 = gen3.generate_random_indices(rangeMax, numberOfIndices)
+        
         # Assert
-        pass
+        self.assertTrue(np.array_equal(indices1, indices2))
+        self.assertFalse(np.array_equal(indices2, indices3))
     
     def test_when_invalid(self):
         # Arrange
+        seed1 = 1234
+        gen1 = RandomNumberGenerator(seed1)
+        
+        # Act & Assert on error
+        with self.assertRaises(ValueError):
+            indices1 = gen1.generate_random_indices(10, 100) # without replacement we can't take 100 out of 10
+
+class TestCalculatorSpacedSampling(unittest.TestCase):
+    def test_when_valid(self):
+        # Arrange
+        length1, resultLength1 = 100, 10
+        length2, resultLength2 = 10, 10
+        length3, resultLength3 = 1, 1
+        length4, resultLength4 = 2, 2
+        length5, resultLength5 = 73, 17 # prime numbers
+        length6, resultLength6 = 79, 78 # close to a prime number
+        
         # Act
+        indices1 = Calculator.evenly_spaced_sampling(length1, resultLength1)
+        indices2 = Calculator.evenly_spaced_sampling(length2, resultLength2)
+        indices3 = Calculator.evenly_spaced_sampling(length3, resultLength3)
+        indices4 = Calculator.evenly_spaced_sampling(length4, resultLength4)
+        indices5 = Calculator.evenly_spaced_sampling(length5, resultLength5)
+        indices6 = Calculator.evenly_spaced_sampling(length6, resultLength6)
+        
         # Assert
+        self.assertEqual(len(indices1), resultLength1)
+        self.assertEqual(len(indices2), resultLength2)
+        self.assertEqual(len(indices3), resultLength3)
+        self.assertEqual(len(indices4), resultLength4)
+        self.assertEqual(len(indices5), resultLength5)
+    
+    def test_when_invalid(self):
+        # Arrange
+        length1, resultLength1 = "100", 10
+        length2, resultLength2 = 10, 1e6
+        length3, resultLength3 = 1, 2
+        length4, resultLength4 = 0, 0
+        
+        # Act & Assert on errors
+        with self.assertRaises(TypeError): # value is not an integer
+            indices1 = Calculator.evenly_spaced_sampling(length1, resultLength1)
+        with self.assertRaises(TypeError): # value is not an integer
+            indices2 = Calculator.evenly_spaced_sampling(length2, resultLength2)
+        with self.assertRaises(ValueError): # resultLength >= length
+            indices3 = Calculator.evenly_spaced_sampling(length3, resultLength3)
+        with self.assertRaises(ValueError): # length of 0 is nonsensical
+            indices4 = Calculator.evenly_spaced_sampling(length4, resultLength4)
         pass
 
 class TestCalculatorCounter(unittest.TestCase):
     def test_when_valid(self):
         # Arrange
+        values1 = [0, 1, 2, 3]
+        values2 = [0, 0, 1, 1, 2]
+        values3 = [0, "0", 0, 1]
+        
+        expectedUnique1 = values1
+        expectedCounts1 = [1, 1, 1, 1]
+        
+        expectedUnique2 = [0, 1, 2]
+        expectedCounts2 = [2, 2, 1]
+        
+        expectedUnique3 = [0, 1]
+        expectedCounts3 = [3, 1]
+        
         # Act
+        unique1, counts1 = Calculator.counter(values1)
+        unique2, counts2 = Calculator.counter(values2)
+        unique3, counts3 = Calculator.counter(values3) # numpy is happy casting "0" to np.int(0)
+        
         # Assert
-        pass
-    
-    def test_when_invalid(self):
-        # Arrange
-        # Act
-        # Assert
-        pass
+        self.assertTrue(np.array_equal(unique1, expectedUnique1))
+        self.assertTrue(np.array_equal(unique2, expectedUnique2))
+        self.assertTrue(np.array_equal(unique3, expectedUnique3))
+        
+        self.assertTrue(np.array_equal(counts1, expectedCounts1))
+        self.assertTrue(np.array_equal(counts2, expectedCounts2))
+        self.assertTrue(np.array_equal(counts3, expectedCounts3))
 
 class TestCalculatorEuclideanDistance(unittest.TestCase):
     def test_when_valid(self):
         # Arrange
+        alleles1 = np.array([
+            [0,0,0,0],
+            [0,0,0,1],
+            [0,0,1,1],
+            [0,1,1,1],
+            [1,1,1,1]
+        ])
+        alleles2 = np.array([
+            [1,1,1,1],
+            [1,1,1,1],
+            [1,1,1,1],
+            [1,1,1,1],
+            [1,1,1,1]
+        ])
+        numAlleles = 4
+        
         # Act
+        value1 = np.sqrt(np.sum([
+            ((4 / 4) - (0 / 4))**2, # allele '0' in alleles1 vs alleles2
+            ((0 / 4) - (4 / 4))**2, # allele '1' in alleles1 vs alleles2
+        ]))**4
+        value2 = np.sqrt(np.sum([
+            ((3 / 4) - (0 / 4))**2,
+            ((1 / 4) - (4 / 4))**2,
+        ]))**4
+        value3 = np.sqrt(np.sum([
+            ((2 / 4) - (0 / 4))**2,
+            ((2 / 4) - (4 / 4))**2,
+        ]))**4
+        value4 = np.sqrt(np.sum([
+            ((1 / 4) - (0 / 4))**2,
+            ((3 / 4) - (4 / 4))**2,
+        ]))**4
+        value5 = np.sqrt(np.sum([
+            ((0 / 4) - (0 / 4))**2,
+            ((4 / 4) - (4 / 4))**2,
+        ]))**4
+        expectedValues = np.array([value1, value2, value3, value4, value5])
+        
+        edist = Calculator.euclidean_distance(alleles1, alleles2, power=4)
+        
         # Assert
-        pass
-    
-    def test_when_invalid(self):
-        # Arrange
-        # Act
-        # Assert
-        pass
+        self.assertTrue(np.array_equal(edist, expectedValues))
 
 class TestCalculatorRsquared(unittest.TestCase):
     def test_when_valid(self):
@@ -651,4 +855,5 @@ class TestCalculatorRsquared(unittest.TestCase):
         pass
 
 if __name__ == '__main__':
+    cleanup()
     unittest.main()

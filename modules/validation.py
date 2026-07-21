@@ -32,7 +32,7 @@ def validate_args(args):
     args.combination = " ".join(args.combination)
     
     # Create locations object
-    args.locations = Locations(args.outputDirectory) # internally validates args.outputDirectory
+    args.locations = Locations(args.outputDirectory, quiet=False) # internally validates args.outputDirectory
 
 def validate_breeding_population(locations):
     '''

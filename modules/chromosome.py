@@ -7,11 +7,12 @@ import numpy as np
 
 class Chromosome:
     '''
-    Properties:
+    Args:
         chromID -- a string identifying the chromosome.
         positions -- a list of integers indicating the location of each QTL in basepairs.
         genotypes -- a list of Genotype objects ordered to correspond to the given positions.
         chromMap -- a ChromosomeMap object corresponding to this chromosome.
+    Properties:
         ploidy -- an integer indicating the number of chromosome copies.
         numVariants -- an integer indicating how many variants/genotypes/alleles/SNPs this chromosome represents.
         array -- a numpy array with shape (1, numVariants, ploidy) which is the fundamental data structure

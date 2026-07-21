@@ -43,6 +43,31 @@ class Calculator:
                      of the prediction to the actual values
     '''
     @staticmethod
+    def evenly_spaced_sampling(length, resultLength):
+        '''
+        Receives a length value, which may represent the length of an iterable,
+        alongside the intended length of an output iterable. Based on these values,
+        an output list will be generated with the index values to obtain from
+        the original list to produce an approximately evenly divided output.
+        
+        Params:
+            length -- an integer value, possibly derived from a list length as example.
+            resultLength -- an integer value for the desired number of output indices
+        Returns:
+            indices -- a numpy array of integer values giving the array indices to obtain
+                       for an evenly spaced sampling outcome
+        '''
+        if not isinstance(length, (int, np.integer)):
+            raise TypeError(f"Spaced sampling requires an integer-type 'length' value, not '{type(length).__name__}'")
+        if not isinstance(resultLength, (int, np.integer)):
+            raise TypeError(f"Spaced sampling requires an integer-type 'resultLength' value, not '{type(resultLength).__name__}'")
+        if length < resultLength:
+            raise ValueError(f"Spaced sampling requires resultLength ({resultLength}) to be <= length ({length})")
+        if length == 0:
+            raise ValueError(f"Spaced sampling from an iterable with length 0 is nonsensical")
+        return np.linspace(0, length-1, resultLength).astype(int) # length-1 to make output a 0-based index
+    
+    @staticmethod
     def counter(array):
         '''
         Parameters:
