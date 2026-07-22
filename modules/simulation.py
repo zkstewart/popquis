@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.population import Population
 from modules.spreadsheet import Spreadsheet
 from modules.statistics import Calculator, RandomNumberGenerator
+from modules.template import Template
 
 class Configuration:
     '''
@@ -290,82 +291,55 @@ class Critic:
         self.isCritic = True # object type validator
     
     @staticmethod
-    def triangle_fit(y):
+    def generate_templates(length):
+        triangle = Template.generate_triangle_template(length)
+        plateau1 = Template.generate_plateau_template(length, plateauFraction=0.2)
+        plateau2 = Template.generate_plateau_template(length, plateauFraction=0.3)
+        plateau3 = Template.generate_plateau_template(length, plateauFraction=0.4)
+        return triangle, plateau1, plateau2, plateau3
+    
+    @staticmethod
+    def score(y, templates, significantChange=0.5):
         '''
-        Fits a triangle shape to the y-axis (ED^4) data points. This is done as 1) a triangle
-        with points at the minimum y value (left and right) with the maximum at the centre.
-        It is also done as 2) the same concept but with a plateau at a local minimum
-        on the left and right borders.
+        Evaluate whether the data points form a triangular shape where the centre is a peak/maximum and
+        the edges are a trough/minimum. The data is normalised to be mostly scale-invariant, and is
+        subsequently compared to a "triangular shape template" to assess the shape of the data.
+        The magnitude of the difference between the central peak and the edge minima is factored
+        in to ensure that the difference is biologically meaningful and visually identifable if
+        the data were plotted.
         
-        The goal is to find a distinct and noticeable peak in the statistics occurring at the site
-        where the simulated QTL exists i.e., in the centre of the chromosome. A simple line is
-        used to avoid potential overfitting, and to conform to an intuitive sense of how a QTL
-        should manifest visually. This trend is measured with R-squared.
+        Employs two shape templates:
+            1) a triangle with the minimum y value at the left and right edges, increasing
+               in a straight line to the maximum y value at the centre.
+            2) same as (1) except that the left and right edges are allowed to plateau for
+               some distance before the straight line climb to the central maximum occurs.
+        
+        The correlation between the normalised data and the templated shape is computed as a
+        measurement of whether the original y values would enable clear visual identification
+        of a QTL.
         
         Parameters:
             y -- a numpy array of numeric values for the ED^4 segregation of the SNPs
+            significantChange -- a float value giving the amount of change in the ED^4
+                                 statistic needed for a change to be meaningfully visible;
+                                 used to penalise changes that are less than this amount
+        Returns:
+            templateScore -- a float ranging from zero (worst) to one (best) measuring a QTL's
+                             ability to be identified in the data
         '''
-        # Get the triangle points
-        minY = np.min(y)
-        maxY = np.max(y)
-        midY = (minY + maxY) / 2
+        if np.std(y) == 0:
+            return 0 # a flat line should have 0 score; also speed up program and avoid divide by zero error later
         
-        centreIndex = len(y) / 2
-        quarterIndex = centreIndex / 2
+        prominence = min(np.ptp(y) / significantChange, 1.0)
         
-        # Handle flat lines
-        diffY = max(maxY*0.1, minY*0.50) # account for flat lines by enforcing some difference between min and max
-        if diffY < 1e-3:
-            diffY = 1e-3 # mitigate issues with extremely low ED^4 values
+        scores = []
+        for template in templates:
+            fittedShape = Template.fit(y, template)
+            score = fittedShape * prominence
+            scores.append(score)
         
-        if (minY+diffY) >= maxY: # we need a noticeable difference between min and max for QTL detection
-            maxY += diffY
-        
-        # Triangle 1: full range peak (^)
-        slopeUp = np.linspace(minY, maxY, num=np.floor(centreIndex).astype(int))
-        slopeDown = np.linspace(maxY, minY, num=np.ceil(centreIndex).astype(int))
-        fullTriangleY = np.concatenate((slopeUp, slopeDown))
-        fullRsquared = Calculator.r_squared(y, fullTriangleY)
-        
-        # Triangle 2: subrange peak (_^_)
-        leftFlatIndex = 0
-        while leftFlatIndex < quarterIndex: # only plateau up to 1/4 into the 'plot'
-            if y[leftFlatIndex] > midY:
-                break
-            leftFlatIndex += 1 # check the next position in this quadrant
-        
-        if leftFlatIndex != 0: # this is 0 if the starting position is >= midY
-            leftAvgY = np.mean(y[0:leftFlatIndex])
-        else:
-            leftAvgY = minY
-        slopeUp = np.concatenate((
-            np.array([ leftAvgY for _ in range(leftFlatIndex)]), # plateau
-            np.linspace(leftAvgY, maxY, num=np.floor(centreIndex).astype(int) - leftFlatIndex) # peak (incline)
-        ))
-        
-        rightFlatIndex = len(y)-1
-        while rightFlatIndex > (np.ceil(centreIndex).astype(int) + quarterIndex): # only plateau for the last 1/4 of the 'plot'
-            if y[rightFlatIndex] > midY:
-                break
-            rightFlatIndex -= 1 # crawl back into this quadrant
-        
-        if rightFlatIndex != len(y)-1: # this is the final index if the ending position is >= midY
-            rightAvgY = np.mean(y[rightFlatIndex:])
-        else:
-            rightAvgY = minY
-        slopeDown = np.concatenate((
-            np.linspace(maxY, rightAvgY, num=rightFlatIndex - np.floor(centreIndex).astype(int)), # peak (decline)
-            np.array([ rightAvgY for _ in range(len(y) - rightFlatIndex)]) # plateau
-        ))
-        
-        subrangeTriangleY = np.concatenate((slopeUp, slopeDown))
-        subrangeRsquared = Calculator.r_squared(y, subrangeTriangleY)
-        
-        # Return the best R^2 value
-        if (fullRsquared >= subrangeRsquared) or np.isnan(subrangeRsquared):
-            return fullTriangleY, fullRsquared
-        else:
-            return subrangeTriangleY, subrangeRsquared
+        # Return the optimal score
+        return max(scores)
     
     def _define_qtl_ranges(self, breeder):
         '''
@@ -414,51 +388,44 @@ class Critic:
             configuration -- a Configuration object recording the simulation variable combinations
             threads -- an integer giving the number of parallel processes to run where possible
         '''
-        with ProcessPoolExecutor(max_workers=threads) as executor:
-            for (popBalance, phenotypeError), popSizes in configuration:
-                if popSizes is None:
+        for (popBalance, phenotypeError), popSizes in configuration:
+            if popSizes is None:
+                continue
+            
+            # Obtain the Spreadsheet this configuration will have results stored within
+            spreadsheet = Spreadsheet(self.storageDir, popBalance, phenotypeError, popSizes)
+            spreadsheet.load() # runs some internal validations of popBalance, phenotypeError, and popSizes
+            
+            # See if this configuration has been completely processed
+            if hasattr(spreadsheet, "scores1"): # .scores1 is set if we have run this at least partially
+                expectedAttr = [ f"scores{i+1}" for i in range(len(self.qtlRanges)) ]
+                if all([ hasattr(spreadsheet, x) for x in expectedAttr ]):
+                    "This check is technically passable with faulty data, but you'd really have to be TRYING to kill popquis..."
                     continue
+            
+            # If not, iterate through each QTL to generate its results
+            for i, (startIndex, endIndex) in enumerate(self.qtlRanges):
+                # Slice the Spreadsheet ED array to get the statistics for this range
+                assert spreadsheet.ed is not None, "sanity check; if we are running Critic, .ed must be set already"
+                qtlED = spreadsheet.ed[:,:,startIndex:endIndex] # TBD: check that this is appropriately inclusive of the QTL range
+                numPopSizes, numBootstraps, numVariants = qtlED.shape
                 
-                # Obtain the Spreadsheet this configuration will have results stored within
-                spreadsheet = Spreadsheet(self.storageDir, popBalance, phenotypeError, popSizes)
-                spreadsheet.load() # runs some internal validations of popBalance, phenotypeError, and popSizes
+                # Assess each replication of this parameter combination
+                templates = Critic.generate_templates(numVariants)
+                scores = []
+                for popSizeArray in qtlED:
+                    for replicateArray in popSizeArray:
+                        score = Critic.score(replicateArray, templates, significantChange=0.5)
+                        scores.append(score)
                 
-                # See if this configuration has been completely processed
-                if hasattr(spreadsheet, "fitted1"): # .fitted1 is set if we have run this at least partially
-                    expectedAttr = [ f"fitted{i+1}" for i in range(len(self.qtlRanges)) ]
-                    if all([ hasattr(spreadsheet, x) for x in expectedAttr ]):
-                        "This check is technically passable with faulty data, but you'd really have to be TRYING to kill popquis..."
-                        continue
+                # Reshape scores into an array that matches the QTL shape
+                scores = np.stack(np.split(np.array(scores), len(popSizes)))  # shape = (popsize, bootstraps)
                 
-                # If not, iterate through each QTL to generate its results
-                for i, (startIndex, endIndex) in enumerate(self.qtlRanges):
-                    # Slice the Spreadsheet ED array to get the statistics for this range
-                    assert spreadsheet.ed is not None, "sanity check; if we are running Critic, .ed must be set already"
-                    qtlED = spreadsheet.ed[:,:,startIndex:endIndex] # TBD: check that this is appropriately inclusive of the QTL range
-                    
-                    # Assess each replication of this parameter combination
-                    futures = []
-                    for popSizeArray in qtlED:
-                        for replicateArray in popSizeArray:
-                            future = executor.submit(Critic.triangle_fit, replicateArray)
-                            futures.append(future)
-                    
-                    # Extract and join resulting arrays
-                    if len(futures) != 0:
-                        fittedY, r2Values = zip(*[ x.result() for x in futures ])
-                        fittedArray = np.stack(fittedY) # shape = (popSize*bootstraps, numVariants)
-                        fittedArray = np.stack(np.split(fittedArray, len(popSizes))) # shape = (popsize, bootstraps, numVariants)
-                        
-                        resultsR2 = np.stack(np.split(np.array(r2Values), len(popSizes))) # shape = (popsize, bootstraps)
-                    else:
-                        raise Exception("Critic failed as futures list is empty but popSizes is not empty")
-                    
-                    # Store results in Spreadsheet
-                    setattr(spreadsheet, f"fitted{i+1}", fittedArray)
-                    setattr(spreadsheet, f"rsq{i+1}", resultsR2)
-                
-                # Store the results into the Spreadsheet
-                spreadsheet.save()
+                # Store results in Spreadsheet
+                setattr(spreadsheet, f"scores{i+1}", scores)
+            
+            # Store the results into the Spreadsheet
+            spreadsheet.save()
     
     def __repr__(self):
         return "<Critic object;storageDir='{0}';qtlRanges={1}>".format(

@@ -25,8 +25,10 @@ from modules.population import Population
 from modules.simulation import Configuration, Coordinator, Critic
 from modules.spreadsheet import Spreadsheet
 from modules.statistics import RandomNumberGenerator, Calculator
+from modules.template import Template
 
 # Specify data locations
+__file__ = "/mnt/c/git/popquis/tests/test_units.py"
 testDir = os.path.dirname(os.path.abspath(__file__))
 tmpDir = os.path.join(testDir, "tmp")
 
@@ -698,16 +700,14 @@ class TestSpreadsheet(unittest.TestCase):
         chosenBalance, chosenError = (0.5, 0.0)
         chosenPopsize = configuration.combos[(chosenBalance, chosenError)]
         
-        fitted0 = np.array([0, 0, 0])
-        fitted1 = np.array([1, 1, 1])
-        rsq1 = np.array([0.0, 0.12, -2.365])
+        scores0 = np.array([0, 0, 0])
+        scores1 = np.array([1, 1, 1])
         _ignored = np.array([2, 2, 2])
         
         # Act
         spreadsheet = Spreadsheet(locations.storageDir, chosenBalance, chosenError, chosenPopsize)
-        spreadsheet.fitted0 = fitted0
-        spreadsheet.fitted1 = fitted1
-        spreadsheet.rsq1 = rsq1
+        spreadsheet.scores0 = scores0
+        spreadsheet.scores1 = scores1
         spreadsheet._ignored = _ignored
         
         spreadsheet.save()
@@ -716,12 +716,10 @@ class TestSpreadsheet(unittest.TestCase):
         spreadsheet.load()
         
         # Assert
-        self.assertTrue(hasattr(spreadsheet, "fitted0"))
-        self.assertTrue(np.array_equal(spreadsheet.fitted0, fitted0))
-        self.assertTrue(hasattr(spreadsheet, "fitted1"))
-        self.assertTrue(np.array_equal(spreadsheet.fitted1, fitted1))
-        self.assertTrue(hasattr(spreadsheet, "rsq1"))
-        self.assertTrue(np.array_equal(spreadsheet.rsq1, rsq1))
+        self.assertTrue(hasattr(spreadsheet, "scores0"))
+        self.assertTrue(np.array_equal(spreadsheet.scores0, scores0))
+        self.assertTrue(hasattr(spreadsheet, "scores1"))
+        self.assertTrue(np.array_equal(spreadsheet.scores1, scores1))
         self.assertFalse(hasattr(spreadsheet, "_ignored"))
 
 class TestRandomNumberGenerator(unittest.TestCase):
@@ -875,37 +873,6 @@ class TestCalculatorEuclideanDistance(unittest.TestCase):
         # Assert
         self.assertTrue(np.array_equal(edist, expectedValues))
 
-class TestCalculatorRsquared(unittest.TestCase):
-    def test_when_valid(self):
-        # Arrange
-        array1 = np.array([1, 2, 3])
-        array2 = np.array([2, 3, 4])
-        array3 = np.array([[1, 2, 3], [1, 2, 3]])
-        array4 = np.array([[2, 3, 4], [2, 3, 4]])
-        
-        expected1 = -0.5
-        expected2 = -0.5 # works across multiple dimensions
-        expected3 = 1 # R^2 is 1 when data is exactly the same
-        
-        # Act
-        value1 = Calculator.r_squared(array1, array2)
-        value2 = Calculator.r_squared(array3, array4)
-        value3 = Calculator.r_squared(array1, array1)
-        
-        # Assert
-        self.assertEqual(value1, expected1)
-        self.assertEqual(value2, expected2)
-        self.assertEqual(value3, expected3)
-    
-    def test_when_invalid(self):
-        # Arrange
-        array1 = np.array([1, 2, 3])
-        array2 = np.array([1, 2, 3, 4])
-        
-        # Act & Assert on errors
-        with self.assertRaises(ValueError): # array shapes are different
-            Calculator.r_squared(array1, array2)        
-
 class TestCritic(unittest.TestCase):
     def test_when_valid(self):
         # Arrange
@@ -930,27 +897,75 @@ class TestCritic(unittest.TestCase):
         # Assert
         self.assertEqual(critic.qtlRanges, expectedQtlRanges)
     
-    def test_triangle_fit(self):
+    def test_score(self):
+        "See TestTemplate.test_when_valid for the comparison being made in this test"
         # Arrange
-        y1 = np.array([
-            *list(np.zeros(5)),
-            *list(np.linspace(0, 4, 10)),
-            *list(np.linspace(4, 0, 10)),
-            *list(np.zeros(5))
+        y4 = np.array([
+            *list(np.ones(19)),
+            1.01,
+            1.01,
+            *list(np.ones(19))
         ])
-        y2 = np.array([
-            *list(np.ones(5)),
-            *list(np.linspace(0, 4, 10)),
-            *list(np.linspace(4, 0, 10)),
-            *list(np.zeros(5))
-        ])
+        triangle = Template.generate_triangle_template(40)
         
         # Act
-        fittedY1, rsq1 = Critic.triangle_fit(y1) # should give a good fit
-        fittedY2, rsq2 = Critic.triangle_fit(y2) # should ideally give a worse fit?
+        templateScore = Template.fit(y4, triangle) # np.float64(0.3779644730092271)
+        criticScore1 = Critic.score(y4, [triangle], significantChange=0.5) # np.float64(0.007559289460184549)
+        criticScore2 = Critic.score(y4, [triangle], significantChange=4) # np.float64(0.0009449111825230686)
         
         # Assert
-        pass 
+        self.assertTrue(templateScore > criticScore1) # Critic penalises the lack of magnitude/prominence
+        self.assertTrue(criticScore1 > criticScore2) # significantChange scales the amount of penalty
+
+class TestTemplate(unittest.TestCase):
+    def test_when_valid(self):
+        # Arrange
+        y1 = np.array([
+            *list(np.linspace(0, 4, 20)),
+            *list(np.linspace(4, 0, 20)),
+        ])
+        y2 = np.array([
+            *list(np.zeros(10)),
+            *list(np.linspace(0, 4, 10)),
+            *list(np.linspace(4, 0, 10)),
+            *list(np.zeros(10))
+        ])
+        y3 = np.array([
+            *list(np.ones(10)),
+            *list(np.linspace(0, 4, 10)),
+            *list(np.linspace(4, 0, 10)),
+            *list(np.zeros(10))
+        ])
+        y4 = np.array([
+            *list(np.ones(19)),
+            1.01,
+            1.01,
+            *list(np.ones(19))
+        ])
+        
+        triangle = Template.generate_triangle_template(40) # all arrays have length 40
+        plateau1 = Template.generate_plateau_template(40, plateauFraction=0.25) # plateauFraction matches the actual plateau length
+        plateau2 = Template.generate_plateau_template(40, plateauFraction=0.40)
+        
+        expected1 = np.float64(1.0) # should be a near-perfect fit
+        expected2 = np.float64(0.992) # should be a very good fit; not necessarily perfect due to the two 4's in the centre
+        expected3 = np.float64(0.799) # should be worse than score2 as the plateau is incorrectly sized now
+        expected4 = np.float64(0.933) # should be worse than score2 as the plateau is skewed between left and right
+        expected5 = np.float64(0.378) # should be the worst as the peak is very sudden; magnitude is small but not penalised here
+        
+        # Act
+        score1 = Template.fit(y1, triangle) # np.float64(0.9999999999999998)
+        score2 = Template.fit(y2, plateau1) # np.float64(0.9926846128175764)
+        score3 = Template.fit(y2, plateau2) # np.float64(0.7996597916069839)
+        score4 = Template.fit(y3, plateau1) # np.float64(0.9336920057552545)
+        score5 = Template.fit(y4, triangle) # np.float64(0.3779644730092271)
+        
+        # Assert
+        self.assertAlmostEqual(score1, expected1, places=2)
+        self.assertAlmostEqual(score2, expected2, places=2)
+        self.assertAlmostEqual(score3, expected3, places=2)
+        self.assertAlmostEqual(score4, expected4, places=2)
+        self.assertAlmostEqual(score5, expected5, places=2)
 
 if __name__ == '__main__':
     cleanup()

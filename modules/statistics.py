@@ -36,11 +36,11 @@ class Calculator:
     Namespace for calculations needed for evaluating segregation statistics.
     
     Methods:
+        evenly_spaced_sampling -- assuming an array of size=n, returns a user-specified
+                                  number of indices that are evenly spaced within range(0, n)
         counter -- numpy-style version of collections.Counter
         euclidean_distance -- receives two arrays of alleles and calculates the ED
                               segregation statistic
-        r_squared -- receives two arrays (actual, predicted) and calculates the R^2 fit
-                     of the prediction to the actual values
     '''
     @staticmethod
     def evenly_spaced_sampling(length, resultLength):
@@ -120,21 +120,3 @@ class Calculator:
             distances.append(np.power(edist, power))
         
         return np.array(distances)
-    
-    @staticmethod
-    def r_squared(y, ypred):
-        '''
-        Calculates R-squared for a line/curve fitting.
-        
-        Parameters:
-            y -- a numpy array of measured data values
-            ypred -- a numpy array of predicted data values
-        '''
-        if y.shape != ypred.shape:
-            raise ValueError(f"r_squared calculation not possible with different shape arrays")
-        
-        residuals = y - ypred
-        ss_res = np.sum(np.power(residuals, 2))
-        ss_tot = np.sum((y - np.mean(y))**2)
-        r_squared = 1 - (ss_res / ss_tot)
-        return r_squared
