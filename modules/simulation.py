@@ -285,6 +285,10 @@ class Critic:
                for assessment of whether the Euclidean distance segregation would enable identification
                of a QTL peak
     '''
+    WEAK_SCORE = 0.25
+    MID_SCORE = 0.50
+    STRONG_SCORE = 0.75
+    
     def __init__(self, locations, breeder):
         self.storageDir = locations.storageDir
         self._define_qtl_ranges(breeder)
@@ -341,6 +345,30 @@ class Critic:
         # Return the optimal score
         return max(scores)
     
+    @staticmethod
+    def scores_to_strength(scores):
+        '''
+        Categorises multiple line-fit scores, each ranging from from 0->1, into one of several
+        categories for easier assessment of the statistical outcome of a simulated segregation
+        experiment.
+        
+        Parameters:
+            scores -- a numpy array with shape (num_pop_sizes, num_bootstraps) containing float
+                      values from 0 to 1 (inclusive)
+        Returns:
+            strengths -- a numpy array with shape (num_pop_sizes, 4) where the bootstrap replicated
+                         scores have been summarised into one of four different categories ordered
+                         as: [none, weak, moderate, strong]
+        '''
+        strengths = []
+        for popSizeArray in scores:
+            noSignal = sum((popSizeArray < Critic.WEAK_SCORE) | (np.isnan(popSizeArray)))
+            weakSignal = sum((popSizeArray >= Critic.WEAK_SCORE) & (popSizeArray < Critic.MID_SCORE))
+            moderateSignal = sum((popSizeArray >= Critic.MID_SCORE) & (popSizeArray < Critic.STRONG_SCORE))
+            strongSignal = sum(popSizeArray >= Critic.STRONG_SCORE)
+            strengths.append([noSignal, weakSignal, moderateSignal, strongSignal])
+        return np.array(strengths)
+    
     def _define_qtl_ranges(self, breeder):
         '''
         Parameters:
@@ -382,11 +410,10 @@ class Critic:
         "self.genomeMap.chromIDs is a set, and hence the ordering of chromosomes is not guaranteed"
         self.qtlRanges.sort(key = lambda x: x[0])
     
-    def run(self, configuration, threads):
+    def run(self, configuration):
         '''
         Parameters:
             configuration -- a Configuration object recording the simulation variable combinations
-            threads -- an integer giving the number of parallel processes to run where possible
         '''
         for (popBalance, phenotypeError), popSizes in configuration:
             if popSizes is None:
@@ -421,8 +448,12 @@ class Critic:
                 # Reshape scores into an array that matches the QTL shape
                 scores = np.stack(np.split(np.array(scores), len(popSizes)))  # shape = (popsize, bootstraps)
                 
+                # Also summarise scores as the signal strength
+                strengths = Critic.scores_to_strength(scores)
+                
                 # Store results in Spreadsheet
                 setattr(spreadsheet, f"scores{i+1}", scores)
+                setattr(spreadsheet, f"strengths{i+1}", strengths)
             
             # Store the results into the Spreadsheet
             spreadsheet.save()

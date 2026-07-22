@@ -70,7 +70,7 @@ class Spreadsheet:
         if os.path.isfile(self.fileName):
             with np.load(self.fileName, allow_pickle=True) as data:
                 # Load unfixed variables
-                EXPECTED_UNFIXED = ["scores"]
+                EXPECTED_UNFIXED = ["scores", "strengths"]
                 for key in data.files:
                     if any([ key.startswith(prefix) for prefix in EXPECTED_UNFIXED ]):
                         setattr(self, key, data[key])
@@ -97,10 +97,10 @@ class Spreadsheet:
                                      f"popSizes=={self.popSizes} but instead is =={_popSizes}")
     
     def __repr__(self):
-        return "<Spreadsheet object;storageDir='{0}';popBalance={1};phenotypeError={2};hasED={3};hasR2={4}>".format(
+        return "<Spreadsheet object;storageDir='{0}';popBalance={1};phenotypeError={2};hasED={3};hasScores={4}>".format(
             self.storageDir,
             self.popBalance,
             self.phenotypeError,
             self.ed is not None,
-            self.r2 is not None
+            hasattr(self, "scores1")
         )

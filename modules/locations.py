@@ -19,6 +19,12 @@ class Locations:
     '''
     OKAY_SUFFIX = ".ok"
     
+    @staticmethod
+    def touch(fileName):
+        parentDir = os.path.dirname(os.path.abspath(fileName))
+        if os.path.isdir(parentDir):
+            open(fileName + Locations.OKAY_SUFFIX, "w").close()
+    
     def __init__(self, workingDirectory, quiet=True):
         self.workingDirectory = workingDirectory
         self.init_dirs(quiet=quiet)
@@ -45,6 +51,18 @@ class Locations:
     @property
     def group2Npy(self):
         return os.path.join(self.storageDir, "group2.npy")
+    
+    @property
+    def outputTSV(self):
+        return os.path.join(self.workingDirectory, "report.tsv")
+    
+    @property
+    def outputPNG(self):
+        return os.path.join(self.workingDirectory, "stacked_barplot.png")
+    
+    @property
+    def outputPDF(self):
+        return os.path.join(self.workingDirectory, "stacked_barplot.pdf")
     
     # Methods
     def init_dirs(self, quiet=True):

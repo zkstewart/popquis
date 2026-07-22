@@ -10,7 +10,9 @@ import argparse
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.breeder import Breeder
+from modules.locations import Locations
 from modules.parsing import parse_qtl_encoding
+from modules.reporting import write_report_tsv
 from modules.simulation import Configuration, Coordinator, Critic
 from modules.validation import validate_args, validate_breeding_population
 
@@ -132,14 +134,19 @@ def main():
     coordinator = Coordinator(args.locations)
     coordinator.run(configuration, args.threads, bootstraps=args.bootstraps)
     
-    # Compute the R2 line fit for each simulated variable combination
+    # Score each simulated variable combination
     critic = Critic(args.locations, breeder)
-    critic.run(configuration, args.threads)
+    critic.run(configuration)
     
-    ## Summarise replicated statistics through the signal strength value
-    ## Produce replicate plot (many opaque lines) of the R^2 values for QC/verification of simulation outcomes
+    # Produce an output tabular report of the simulation outcomes
+    if not (os.path.isfile(args.locations.outputTSV) and os.path.isfile(args.locations.outputTSV + Locations.OKAY_SUFFIX)):
+        write_report_tsv(args.locations, configuration, len(args.qtls))
+        Locations.touch(args.locations.outputTSV)
+    else:
+        print(f"# Output report table '{args.locations.outputTSV}' already exists; skipping ...")
     
     # Produce the final stacked barplot visualisation
+    ## TBD
     
     print("Program completed successfully!")
 
