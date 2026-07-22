@@ -11,7 +11,7 @@ import argparse
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.breeder import Breeder
 from modules.parsing import parse_qtl_encoding
-from modules.simulation import Configuration, Coordinator
+from modules.simulation import Configuration, Coordinator, Critic
 from modules.validation import validate_args, validate_breeding_population
 
 def main():
@@ -128,9 +128,13 @@ def main():
     # Establish simulation variable combinations
     configuration = Configuration(args.popSize)
     
-    # Evaluate each variable combination for their segregation statistics
+    # Compute the ED segregation statistics of each simulated variable combination
     coordinator = Coordinator(args.locations)
     coordinator.run(configuration, args.threads, bootstraps=args.bootstraps)
+    
+    # Compute the R2 line fit for each simulated variable combination
+    critic = Critic(args.locations, breeder)
+    critic.run(configuration, args.threads)
     
     ## Summarise replicated statistics through the signal strength value
     ## Produce replicate plot (many opaque lines) of the R^2 values for QC/verification of simulation outcomes

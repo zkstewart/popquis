@@ -21,7 +21,8 @@ class Spreadsheet:
         popSizes -- an iterable containing integers giving population size increments
     Attributes:
         fileName -- a string indicating the location of the .npz storing the data of this Spreadsheet
-        array -- None, or after using self.load(), a numpy array
+        ed -- None, or after using self.load(), it may instead be a numpy array
+        r2 -- None, or after using self.load(), it may instead be a numpy array
     Methods:
         save -- save the data in self to self.fileName
         load -- loads data out of the self.fileName file into self.array and also cross-checks the
@@ -32,7 +33,8 @@ class Spreadsheet:
         self.popBalance = popBalance
         self.phenotypeError = phenotypeError
         self.popSizes = popSizes
-        self.array = None
+        self.ed = None
+        self.r2 = None
         self.isSpreadsheet = True # object type validator
     
     @property
@@ -57,21 +59,27 @@ class Spreadsheet:
     
     @property
     def shape(self):
-        if self.array is None:
+        if self.ed is None: # ed is always set before r2
             return None
-        return self.array.shape
+        return self.ed.shape # r2 has the same shape as ed
     
     def save(self):
-        np.savez(self.fileName, array=self.array, popBalance=self.popBalance,
-                 phenotypeError=self.phenotypeError, popSizes=self.popSizes)
+        np.savez(self.fileName, **{key:value for key, value in self.__dict__.items() if not key.startswith("_")})
     
     def load(self):
         if os.path.isfile(self.fileName):
             with np.load(self.fileName, allow_pickle=True) as data:
-                _array = data["array"]
-                if _array.ndim == 0:
-                    _array = None
-                self.array = _array
+                # Load unfixed variables
+                EXPECTED_UNFIXED = ["fitted", "rsq"]
+                for key in data.files:
+                    if any([ key.startswith(prefix) for prefix in EXPECTED_UNFIXED ]):
+                        setattr(self, key, data[key])
+                
+                # Load static expected variables
+                _ed = data["ed"]
+                if _ed.ndim == 0:
+                    _ed = None
+                self.ed = _ed
                 
                 _popBalance = float(data["popBalance"])
                 if _popBalance != self.popBalance:
@@ -89,8 +97,10 @@ class Spreadsheet:
                                      f"popSizes=={self.popSizes} but instead is =={_popSizes}")
     
     def __repr__(self):
-        return "<Spreadsheet object;storageDir={0};popBalance={1};phenotypeError={2}>".format(
+        return "<Spreadsheet object;storageDir='{0}';popBalance={1};phenotypeError={2};hasED={3};hasR2={4}>".format(
             self.storageDir,
             self.popBalance,
-            self.phenotypeError
+            self.phenotypeError,
+            self.ed is not None,
+            self.r2 is not None
         )

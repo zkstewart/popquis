@@ -121,6 +121,7 @@ class Calculator:
         
         return np.array(distances)
     
+    @staticmethod
     def r_squared(y, ypred):
         '''
         Calculates R-squared for a line/curve fitting.
@@ -129,6 +130,9 @@ class Calculator:
             y -- a numpy array of measured data values
             ypred -- a numpy array of predicted data values
         '''
+        if y.shape != ypred.shape:
+            raise ValueError(f"r_squared calculation not possible with different shape arrays")
+        
         residuals = y - ypred
         ss_res = np.sum(np.power(residuals, 2))
         ss_tot = np.sum((y - np.mean(y))**2)

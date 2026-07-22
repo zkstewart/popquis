@@ -22,12 +22,11 @@ from modules.genotype import Genotype # note that the Genotype class is implicit
 from modules.locations import Locations
 from modules.parsing import parse_genotypes, parse_combination, parse_linkage, parse_qtl_encoding
 from modules.population import Population
-from modules.simulation import Configuration, Coordinator
+from modules.simulation import Configuration, Coordinator, Critic
 from modules.spreadsheet import Spreadsheet
 from modules.statistics import RandomNumberGenerator, Calculator
 
 # Specify data locations
-__file__ = "/mnt/c/git/popquis/tests/test_units.py"
 testDir = os.path.dirname(os.path.abspath(__file__))
 tmpDir = os.path.join(testDir, "tmp")
 
@@ -688,7 +687,42 @@ class TestCoordinator(unittest.TestCase):
         with self.assertRaises(FileNotFoundError): # npy files don't exist
             coordinator = Coordinator(locations)
 
-# 'class TestSpreadsheet(unittest.TestCase) when valid' is tested implicitly by TestCoordinator
+class TestSpreadsheet(unittest.TestCase):
+    def test_unfixed_variable_setting(self):
+        # Arrange
+        os.makedirs(tmpDir, exist_ok=True)
+        locations = Locations(tmpDir)
+        
+        popSize = 50
+        configuration = Configuration(popSize)
+        chosenBalance, chosenError = (0.5, 0.0)
+        chosenPopsize = configuration.combos[(chosenBalance, chosenError)]
+        
+        fitted0 = np.array([0, 0, 0])
+        fitted1 = np.array([1, 1, 1])
+        rsq1 = np.array([0.0, 0.12, -2.365])
+        _ignored = np.array([2, 2, 2])
+        
+        # Act
+        spreadsheet = Spreadsheet(locations.storageDir, chosenBalance, chosenError, chosenPopsize)
+        spreadsheet.fitted0 = fitted0
+        spreadsheet.fitted1 = fitted1
+        spreadsheet.rsq1 = rsq1
+        spreadsheet._ignored = _ignored
+        
+        spreadsheet.save()
+        
+        spreadsheet = Spreadsheet(locations.storageDir, chosenBalance, chosenError, chosenPopsize)
+        spreadsheet.load()
+        
+        # Assert
+        self.assertTrue(hasattr(spreadsheet, "fitted0"))
+        self.assertTrue(np.array_equal(spreadsheet.fitted0, fitted0))
+        self.assertTrue(hasattr(spreadsheet, "fitted1"))
+        self.assertTrue(np.array_equal(spreadsheet.fitted1, fitted1))
+        self.assertTrue(hasattr(spreadsheet, "rsq1"))
+        self.assertTrue(np.array_equal(spreadsheet.rsq1, rsq1))
+        self.assertFalse(hasattr(spreadsheet, "_ignored"))
 
 class TestRandomNumberGenerator(unittest.TestCase):
     def test_when_valid(self):
@@ -844,15 +878,79 @@ class TestCalculatorEuclideanDistance(unittest.TestCase):
 class TestCalculatorRsquared(unittest.TestCase):
     def test_when_valid(self):
         # Arrange
+        array1 = np.array([1, 2, 3])
+        array2 = np.array([2, 3, 4])
+        array3 = np.array([[1, 2, 3], [1, 2, 3]])
+        array4 = np.array([[2, 3, 4], [2, 3, 4]])
+        
+        expected1 = -0.5
+        expected2 = -0.5 # works across multiple dimensions
+        expected3 = 1 # R^2 is 1 when data is exactly the same
+        
         # Act
+        value1 = Calculator.r_squared(array1, array2)
+        value2 = Calculator.r_squared(array3, array4)
+        value3 = Calculator.r_squared(array1, array1)
+        
         # Assert
-        pass
+        self.assertEqual(value1, expected1)
+        self.assertEqual(value2, expected2)
+        self.assertEqual(value3, expected3)
     
     def test_when_invalid(self):
         # Arrange
+        array1 = np.array([1, 2, 3])
+        array2 = np.array([1, 2, 3, 4])
+        
+        # Act & Assert on errors
+        with self.assertRaises(ValueError): # array shapes are different
+            Calculator.r_squared(array1, array2)        
+
+class TestCritic(unittest.TestCase):
+    def test_when_valid(self):
+        # Arrange
+        os.makedirs(tmpDir, exist_ok=True)
+        locations = Locations(tmpDir)
+        
+        cmMbp = 3.0
+        genotype1 = [Genotype("0/0"), Genotype("0/1"), Genotype("0/1")] # parent1, parent2, offspring
+        positions = [0]
+        edgeBp = 50
+        positions = [ ("chr1", x + edgeBp) for x in positions ]
+        
+        breeder = Breeder()
+        breeder.establish(positions, [genotype1], cmMbp,
+                          snpMbp=int(1e6), edgeBp=edgeBp)
+        
+        expectedQtlRanges = [(0, 149)] # region is 150bp long, and 0-based
+        
         # Act
+        critic = Critic(locations, breeder)
+        
         # Assert
-        pass
+        self.assertEqual(critic.qtlRanges, expectedQtlRanges)
+    
+    def test_triangle_fit(self):
+        # Arrange
+        y1 = np.array([
+            *list(np.zeros(5)),
+            *list(np.linspace(0, 4, 10)),
+            *list(np.linspace(4, 0, 10)),
+            *list(np.zeros(5))
+        ])
+        y2 = np.array([
+            *list(np.ones(5)),
+            *list(np.linspace(0, 4, 10)),
+            *list(np.linspace(4, 0, 10)),
+            *list(np.zeros(5))
+        ])
+        
+        # Act
+        fittedY1, rsq1 = Critic.triangle_fit(y1) # should give a good fit
+        fittedY2, rsq2 = Critic.triangle_fit(y2) # should ideally give a worse fit?
+        
+        # Assert
+        pass 
 
 if __name__ == '__main__':
     cleanup()
