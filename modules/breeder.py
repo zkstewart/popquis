@@ -78,7 +78,7 @@ class Breeder:
             chromPositions, chromGenotypes = zip(*value)
             
             # Establish the genetic map for this chromosome
-            chromLength = (edgeBp * 2) + chromPositions[-1] # positions are ordered
+            chromLength = (edgeBp * 2) + (chromPositions[-1] + 1) # positions are ordered so get the last; 0-based so plus one
             chromosomeMap = ChromosomeMap(chromID, chromLength, cmMbp, snpMbp)
             self.genomeMap.add(chromosomeMap)
             

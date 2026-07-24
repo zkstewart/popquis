@@ -1,3 +1,8 @@
+# Copyright (C) 2026 Zachary Kenneth Stewart
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import os
 import sys
 
@@ -191,8 +196,8 @@ class Coordinator:
             g2Array = np.vstack((g2Mixed[0:numGroup2Correct], g1Mixed[numGroup1Correct:])) # good + bad
         
         # Reshape arrays for computation
-        g1Array = g1Array.reshape(group1.variants, group1Size * group1.ploidy)
-        g2Array = g2Array.reshape(group2.variants, group2Size * group2.ploidy)
+        g1Array = g1Array.transpose(1, 0, 2).reshape(group1.variants, -1) # starts as (individuals, variants, ploidy)
+        g2Array = g2Array.transpose(1, 0, 2).reshape(group2.variants, -1) # ends as (variants, individuals * ploidy)
         
         # Calculate Euclidean distance for each genotype and return
         return Calculator.euclidean_distance(g1Array, g2Array, power)
@@ -372,8 +377,8 @@ class Critic:
     def _define_qtl_ranges(self, breeder):
         '''
         Parameters:
-            breeder -- a Breeder object with .markerIndices attribute for identifying the row
-                       index of the simulated QTL(s)
+            breeder -- a Breeder object with .genomeMap and .markerIndices attribute for identifying
+                       the row index of the simulated QTL(s)
         '''
         # Store a modified GenomeMap recording the position of any QTLs
         self.genomeMap = breeder.genomeMap
@@ -434,7 +439,7 @@ class Critic:
             for i, (startIndex, endIndex) in enumerate(self.qtlRanges):
                 # Slice the Spreadsheet ED array to get the statistics for this range
                 assert spreadsheet.ed is not None, "sanity check; if we are running Critic, .ed must be set already"
-                qtlED = spreadsheet.ed[:,:,startIndex:endIndex] # TBD: check that this is appropriately inclusive of the QTL range
+                qtlED = spreadsheet.ed[:,:,startIndex:endIndex+1] # 
                 numPopSizes, numBootstraps, numVariants = qtlED.shape
                 
                 # Assess each replication of this parameter combination
@@ -446,7 +451,7 @@ class Critic:
                         scores.append(score)
                 
                 # Reshape scores into an array that matches the QTL shape
-                scores = np.stack(np.split(np.array(scores), len(popSizes)))  # shape = (popsize, bootstraps)
+                scores = np.stack(np.split(np.array(scores), numPopSizes))  # shape = (popsize, bootstraps)
                 
                 # Also summarise scores as the signal strength
                 strengths = Critic.scores_to_strength(scores)
