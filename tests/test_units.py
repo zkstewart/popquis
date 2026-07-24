@@ -16,19 +16,18 @@ from modules.chromosome import Chromosome
 from modules.chromosomemap import ChromosomeMap
 from modules.combination import Combination
 from modules.errors import InvalidGenotypeError, IncompatibleGenotypeError
+from modules.experiment import Configuration, Coordinator, Critic
 from modules.genome import Genome
 from modules.genomemap import GenomeMap
 from modules.genotype import Genotype # note that the Genotype class is implicitly tested by the TestParsing class herein
 from modules.locations import Locations
 from modules.parsing import parse_genotypes, parse_combination, parse_linkage, parse_qtl_encoding
 from modules.population import Population
-from modules.simulation import Configuration, Coordinator, Critic
 from modules.spreadsheet import Spreadsheet
 from modules.statistics import RandomNumberGenerator, Calculator
 from modules.template import Template
 
 # Specify data locations
-__file__ = "/mnt/c/git/popquis/tests/test_units.py"
 testDir = os.path.dirname(os.path.abspath(__file__))
 tmpDir = os.path.join(testDir, "tmp")
 
@@ -519,17 +518,20 @@ class TestBreeder(unittest.TestCase):
         genotype1 = [Genotype("0/0"), Genotype("0/1"), Genotype("0/1")] # parent1, parent2, offspring
         positions = [0]
         edgeBp = 50
-        positions = [ ("chr1", x + edgeBp) for x in positions ]
+        positions = [ ("chr1", x) for x in positions ]
         combinationEvaluator = Combination("1")
         
         os.makedirs(tmpDir, exist_ok=True)
         locations = Locations(tmpDir)
         
-        # Act & Assert (no error is a pass)
+        # Act
         breeder = Breeder()
         breeder.establish(positions, [genotype1], cmMbp,
                           snpMbp=int(1e6), edgeBp=edgeBp)
-        breeder.produce_progeny(locations, combinationEvaluator, batchSize=100, minimumGroupSize=1, seed=1234)
+        
+        # Assert
+        self.assertEqual(len(breeder.genomeMap.df), (edgeBp*2) + (positions[-1][-1] + 1))
+        breeder.produce_progeny(locations, combinationEvaluator, batchSize=100, minimumGroupSize=1, seed=1234) # no error is a pass
         
         # Clean up
         os.unlink(locations.group1Npy)
@@ -541,7 +543,7 @@ class TestBreeder(unittest.TestCase):
         genotype1 = [Genotype("0/0"), Genotype("1/1"), Genotype("0/1")] # parent1, parent2, offspring
         positions = [0]
         edgeBp = 50
-        positions = [ ("chr1", x + edgeBp) for x in positions ]
+        positions = [ ("chr1", x) for x in positions ]
         combinationEvaluator = Combination("1")
         
         os.makedirs(tmpDir, exist_ok=True)
@@ -611,7 +613,7 @@ class TestCoordinator(unittest.TestCase):
         # Act & Assert (no error is a pass)
         coordinator = Coordinator(locations)
     
-    def test_array_shape(self):
+    def test_array_shape1(self):
         "The Coordinator class forms a combined array of many results; understanding its shape is necessary to parse results back out of the array"
         # Arrange
         numVariants = 15
@@ -638,6 +640,82 @@ class TestCoordinator(unittest.TestCase):
         self.assertEqual(np.sum(resultsArray[1]), bootstraps * numVariants * 2)
         self.assertEqual(np.sum(resultsArray[2]), bootstraps * numVariants * 3)
         self.assertEqual(np.sum(resultsArray[3]), bootstraps * numVariants * 4)
+    
+    def test_array_shape2(self):
+        "The first shape test failed to detect an actual problem with how the arrays were being reshaped"
+        # Arrange
+        numVariants = 15
+        groupSize = 10
+        ploidy = 2
+        array1 = np.array([[[0,1]]*numVariants]*groupSize)
+        
+        expectedStartShape = (groupSize, numVariants, ploidy)
+        expectedEndShape = (numVariants, groupSize*ploidy) # groupSize*ploidy gives numAlleles
+        
+        # Act
+        reshaped1 = np.reshape(np.moveaxis(array1, 0, 2), (numVariants, -1))
+        
+        # Assert
+        self.assertEqual(array1.shape, expectedStartShape)
+        self.assertEqual(reshaped1.shape, expectedEndShape)
+    
+    def test_array_shape3(self):
+        """In the second shape test, the arrays were being dimensionally shaped correctly,
+        but it was unclear if the data was correct. This test shows two different ways at
+        ariving at the same shape with equality of data contents, which appears to suggest
+        that either approach is suitable."""
+        # Arrange
+        numVariants = 15
+        groupSize = 10
+        ploidy = 2
+        array1 = np.array([[[0,1]]*numVariants]*groupSize)
+        
+        expectedStartShape = (groupSize, numVariants, ploidy)
+        expectedEndShape = (numVariants, groupSize*ploidy) # groupSize*ploidy gives numAlleles
+        
+        # Act
+        reshaped1 = np.reshape(np.moveaxis(array1, 0, 2), (numVariants, -1))
+        reshaped2 = array1.transpose(1, 0, 2).reshape(numVariants, -1) 
+        
+        # Assert
+        self.assertEqual(array1.shape, expectedStartShape)
+        self.assertEqual(reshaped1.shape, expectedEndShape)
+        self.assertEqual(reshaped1.shape, reshaped2.shape)
+        self.assertFalse(np.array_equal(reshaped1, reshaped2))
+    
+    def test_phenotype_error_groups(self):
+        "This test will model how the phenotype error is manifested in a group array"
+        # Arrange
+        numVariants = 15
+        groupSize = 10
+        ploidy = 2
+        numGroup1Correct = 7
+        numGroup1Errors = 3
+        numGroup2Correct = 7
+        numGroup2Errors = 3
+        
+        array1 = np.array([[[0,0]]*numVariants]*groupSize)
+        array2 = np.array([[[1,1]]*numVariants]*groupSize)
+        
+        expectedShape = (groupSize, numVariants, ploidy)
+        
+        # Act
+        g1Array = np.vstack((array1[0:numGroup1Correct], array2[numGroup2Correct:])) # good + bad
+        g2Array = np.vstack((array2[0:numGroup2Correct], array1[numGroup1Correct:])) # good + bad
+        
+        # Assert
+        self.assertEqual(g1Array.shape, expectedShape)
+        self.assertEqual(g2Array.shape, expectedShape)
+        
+        for i in range(groupSize):
+            g1Alleles = g1Array[:,i]
+            g2Alleles = g2Array[:,i]
+            if i < numGroup1Correct:
+                self.assertEqual(int(np.sum(g1Alleles == 0)), numGroup1Correct*ploidy)
+                self.assertEqual(int(np.sum(g2Alleles == 1)), numGroup2Correct*ploidy)
+            else:
+                self.assertEqual(int(np.sum(g1Alleles == 1)), numGroup1Errors*ploidy)
+                self.assertEqual(int(np.sum(g2Alleles == 0)), numGroup2Errors*ploidy)
     
     def test_run(self):
         # Arrange
@@ -880,22 +958,35 @@ class TestCritic(unittest.TestCase):
         locations = Locations(tmpDir)
         
         cmMbp = 3.0
-        genotype1 = [Genotype("0/0"), Genotype("0/1"), Genotype("0/1")] # parent1, parent2, offspring
-        positions = [0]
         edgeBp = 50
-        positions = [ ("chr1", x + edgeBp) for x in positions ]
         
-        breeder = Breeder()
-        breeder.establish(positions, [genotype1], cmMbp,
+        genotypes1 = [[Genotype("0/0"), Genotype("0/1"), Genotype("0/1")]] # parent1, parent2, offspring
+        positions1 = [0]
+        positions1 = [ ("chr1", x) for x in positions1 ]
+        
+        genotypes2 = [[Genotype("0/0"), Genotype("0/1"), Genotype("0/1")],
+                      [Genotype("0/0"), Genotype("0/1"), Genotype("0/1")]]
+        positions2 = [0, 50]
+        positions2 = [ ("chr1", x) for x in positions2 ]
+        
+        breeder1 = Breeder()
+        breeder1.establish(positions1, genotypes1, cmMbp,
                           snpMbp=int(1e6), edgeBp=edgeBp)
         
-        expectedQtlRanges = [(0, 149)] # region is 150bp long, and 0-based
+        breeder2 = Breeder()
+        breeder2.establish(positions2, genotypes2, cmMbp,
+                          snpMbp=int(1e6), edgeBp=edgeBp)
+        
+        expectedQtlRanges1 = [(0, 100)] # region is 100bp long, and 0-based
+        expectedQtlRanges2 = [(0, 75), (75, 150)] # region is 150bp long, and 0-based
         
         # Act
-        critic = Critic(locations, breeder)
+        critic1 = Critic(locations, breeder1)
+        critic2 = Critic(locations, breeder2)
         
         # Assert
-        self.assertEqual(critic.qtlRanges, expectedQtlRanges)
+        self.assertEqual(critic1.qtlRanges, expectedQtlRanges1)
+        self.assertEqual(critic2.qtlRanges, expectedQtlRanges2)
     
     def test_score(self):
         "See TestTemplate.test_when_valid for the comparison being made in this test"
@@ -916,6 +1007,91 @@ class TestCritic(unittest.TestCase):
         # Assert
         self.assertTrue(templateScore > criticScore1) # Critic penalises the lack of magnitude/prominence
         self.assertTrue(criticScore1 > criticScore2) # significantChange scales the amount of penalty
+    
+    def test_run(self):
+        # Arrange
+        os.makedirs(tmpDir, exist_ok=True)
+        locations = Locations(tmpDir)
+        
+        groupSize = 15
+        g1Array = np.array(
+            [
+                [
+                    [0,0],
+                    [0,0],
+                    [0,0],
+                    [1,1],
+                    [0,0],
+                    [0,0],
+                    [0,0]
+                ]
+            ] * groupSize
+        )
+        g2Array = np.array(
+            [
+                [
+                    [0,0],
+                    [0,0],
+                    [0,0],
+                    [0,0],
+                    [0,0],
+                    [0,0],
+                    [0,0]
+                ]
+            ] * groupSize
+        )
+        numVariants = 7
+        ploidy = 2
+        power = 4
+        numSizes = 3
+        bootstraps = 11
+        
+        # Arrange the Breeder object
+        cmMbp = 3.0
+        genotype1 = [Genotype("0/1"), Genotype("0/1"), Genotype("1/1")]
+        positions = [0]
+        edgeBp = 3
+        positions = [ ("chr1", x) for x in positions ]
+        
+        breeder = Breeder()
+        breeder.establish(positions, [genotype1], cmMbp,
+                          snpMbp=int(1e6), edgeBp=edgeBp)
+        
+        # Act to emulate the Coordinator process
+        g1Array = g1Array.transpose(1, 0, 2).reshape(g1Array.shape[1], -1)
+        g2Array = g2Array.transpose(1, 0, 2).reshape(g2Array.shape[1], -1)
+        
+        futures = []
+        for _i in range(numSizes):
+            for _x in range(bootstraps):
+                edist = Calculator.euclidean_distance(g1Array, g2Array, power)
+                futures.append(edist)
+        
+        resultsArray = np.stack([ x for x in futures ]) # shape = (numSizes*bootstraps, numVariants)
+        resultsArray = np.stack(np.split(resultsArray, numSizes)) # shape = (numSizes, bootstraps, numVariants)
+        
+        # Act to emulate the Critic process
+        critic = Critic(locations, breeder)
+        
+        startIndex, endIndex = critic.qtlRanges[0]
+        qtlED = resultsArray[:,:,startIndex:endIndex+1]
+        numPopSizes, numBootstraps, numVariants = qtlED.shape
+        
+        templates = Critic.generate_templates(numVariants)
+        scores = []
+        for popSizeArray in qtlED:
+            for replicateArray in popSizeArray:
+                score = Critic.score(replicateArray, templates, significantChange=0.5)
+                scores.append(score)
+        
+        scores = np.stack(np.split(np.array(scores), numPopSizes)) # shape = (popsize, bootstraps)
+        strengths = Critic.scores_to_strength(scores) # shape = (popSize, 4)
+        
+        # Assert
+        ## TBD...
+        
+        # Clean up
+        cleanup()
 
 class TestTemplate(unittest.TestCase):
     def test_when_valid(self):
