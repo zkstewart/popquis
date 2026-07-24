@@ -21,8 +21,8 @@ class Spreadsheet:
         popSizes -- an iterable containing integers giving population size increments
     Attributes:
         fileName -- a string indicating the location of the .npz storing the data of this Spreadsheet
-        ed -- None, or after using self.load(), it may instead be a numpy array
-        r2 -- None, or after using self.load(), it may instead be a numpy array
+        ed -- None, or after using self.load(), it may instead be a numpy array with shape:
+              (len(popSizes), bootstraps, variants)
     Methods:
         save -- save the data in self to self.fileName
         load -- loads data out of the self.fileName file into self.array and also cross-checks the
@@ -34,7 +34,6 @@ class Spreadsheet:
         self.phenotypeError = phenotypeError
         self.popSizes = popSizes
         self.ed = None
-        self.r2 = None
         self.isSpreadsheet = True # object type validator
     
     @property
@@ -59,9 +58,9 @@ class Spreadsheet:
     
     @property
     def shape(self):
-        if self.ed is None: # ed is always set before r2
+        if self.ed is None:
             return None
-        return self.ed.shape # r2 has the same shape as ed
+        return self.ed.shape
     
     def save(self):
         np.savez(self.fileName, **{key:value for key, value in self.__dict__.items() if not key.startswith("_")})
@@ -77,7 +76,7 @@ class Spreadsheet:
                 
                 # Load static expected variables
                 _ed = data["ed"]
-                if _ed.ndim == 0:
+                if _ed.ndim == 0 or len(_ed) == 0:
                     _ed = None
                 self.ed = _ed
                 

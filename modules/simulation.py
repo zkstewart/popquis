@@ -336,7 +336,7 @@ class Critic:
             templateScore -- a float ranging from zero (worst) to one (best) measuring a QTL's
                              ability to be identified in the data
         '''
-        if np.std(y) == 0:
+        if np.isclose(np.std(y), 0): # isclose to tolerate floating point inaccuracy
             return 0 # a flat line should have 0 score; also speed up program and avoid divide by zero error later
         
         prominence = min(np.ptp(y) / significantChange, 1.0)
@@ -421,7 +421,7 @@ class Critic:
             configuration -- a Configuration object recording the simulation variable combinations
         '''
         for (popBalance, phenotypeError), popSizes in configuration:
-            if popSizes is None:
+            if popSizes is None or len(popSizes) == 0:
                 continue
             
             # Obtain the Spreadsheet this configuration will have results stored within
@@ -439,7 +439,7 @@ class Critic:
             for i, (startIndex, endIndex) in enumerate(self.qtlRanges):
                 # Slice the Spreadsheet ED array to get the statistics for this range
                 assert spreadsheet.ed is not None, "sanity check; if we are running Critic, .ed must be set already"
-                qtlED = spreadsheet.ed[:,:,startIndex:endIndex+1] # 
+                qtlED = spreadsheet.ed[:,:,startIndex:endIndex+1] # +1 for end inclusive range
                 numPopSizes, numBootstraps, numVariants = qtlED.shape
                 
                 # Assess each replication of this parameter combination

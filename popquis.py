@@ -114,7 +114,6 @@ def main():
     genotypes, combinationEvaluator, positions = parse_qtl_encoding(args.qtls, args.combination, args.linkage,
                                                                     args.weakDistance, args.moderateDistance,
                                                                     args.strongDistance)
-    args.ploidy = genotypes[0][0].ploidy # all genotypes are validated to be equal, so just grab first
     
     # Produce the breeding population
     "This populates the locations.group1Npy and locations.group2Npy files with simulated individuals"
