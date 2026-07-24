@@ -8,14 +8,13 @@ import sys
 
 import numpy as np
 
-from chromax import Simulator
-
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.chromosome import Chromosome
 from modules.chromosomemap import ChromosomeMap
 from modules.genome import Genome
 from modules.genomemap import GenomeMap
 from modules.population import Population
+from modules.simulator import ChromaxSimulator
 
 class Breeder:
     '''
@@ -23,8 +22,7 @@ class Breeder:
     enable subsequent breeding simulation to occur.
     
     Attributes:
-        genomeMap -- a GenomeMap object which is a composition of two ChromosomeMap objects,
-                     one for each parent
+        genomeMap -- a GenomeMap object which is a composition of ChromosomeMap objects
         parent1 -- a Genome object which is a composition of one or more Chromosome objects,
                    providing an array of parent1's simulated genotype
         parent2 -- as above, but for parent2
@@ -120,12 +118,6 @@ class Breeder:
                                 exceeds this value, no more individuals will be stored for that group.
             seed -- an integer to specify a random number seed used by Chromax when generating progeny
         '''
-        # Init the simulator
-        simulator = Simulator(genetic_map=self.genomeMap.df, seed=seed)
-        
-        # Produce parent chromosome data structure for handling by chromax
-        parents = np.vstack((self.parent1.array, self.parent2.array))
-        
         # Create a storage container for each population / load an existing and ongoing population build
         group1 = Population(locations.group1Npy)
         group1.load()
@@ -133,11 +125,9 @@ class Breeder:
         group2.load()
         
         # Simulate progeny in batches to attain a pre-requisite population size for each group
-        numCrosses = 1 # we only simulate a single generation
+        simulator = ChromaxSimulator(self.parent1, self.parent2, self.genomeMap)
         while (group1.individuals is None or group1.individuals < minimumGroupSize) or (group2.individuals is None or group2.individuals < minimumGroupSize):
-            f1, _ = simulator.random_crosses(parents, numCrosses, n_offspring=batchSize) # f1 has shape (n_crosses, n_individuals, n_loci, n_alleles)
-            f1 = f1.reshape(batchSize, len(self.genomeMap.df), self.parent1.ploidy) # reshape to (n_individuals, n_loci, n_alleles)
-            f1 = [ np.asarray(x) for x in f1 ] # change type: jaxlib._jax.ArrayImpl -> np.array
+            f1 = simulator.cross(batchSize=batchSize)
             
             # Segregate progeny based on combined QTL inheritance
             numGroup1 = 0

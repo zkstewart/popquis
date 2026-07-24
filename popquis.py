@@ -10,10 +10,10 @@ import argparse
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.breeder import Breeder
+from modules.experiment import Configuration, Coordinator, Critic
 from modules.locations import Locations
 from modules.parsing import parse_qtl_encoding
 from modules.reporting import write_report_tsv
-from modules.simulation import Configuration, Coordinator, Critic
 from modules.validation import validate_args, validate_breeding_population
 
 def main():
