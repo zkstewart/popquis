@@ -85,11 +85,11 @@ class Breeder:
             # Establish the parental genomes for this chromosome
             parent1Genotypes = [ x[0] for x in chromGenotypes ]
             parent1 = Chromosome(chromID, chromPositions, parent1Genotypes, chromosomeMap)
-            self.parent1.add(parent1)
+            self.parent1[chromID] = parent1
             
             parent2Genotypes = [ x[1] for x in chromGenotypes ]
             parent2 = Chromosome(chromID, chromPositions, parent2Genotypes, chromosomeMap)
-            self.parent2.add(parent2)
+            self.parent2[chromID] = parent2
             
             # Hold onto the markers for segregating offspring identification
             offspringGenotypes += [ x[2] for x in chromGenotypes ]

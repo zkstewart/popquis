@@ -9,7 +9,8 @@ class GenomeMap:
     '''
     Properties:
         chromIDs -- a list of strings indicating which ChromosomeMap objects this Class has ingested.
-        df -- a pandas DataFrame suitable for chromax handling.
+        df -- a pandas DataFrame suitable concatenating all the ChromosomeMap.df objects
+              this one has ingested.
         markers -- a convenience function to return the rows of self.df that are
                    a marker
     '''

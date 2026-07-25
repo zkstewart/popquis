@@ -13,20 +13,14 @@ class Chromosome:
         genotypes -- a list of Genotype objects ordered to correspond to the given positions.
         chromMap -- a ChromosomeMap object corresponding to this chromosome.
     Properties:
+        variants -- an integer indicating how many variants/genotypes/alleles/SNPs this chromosome represents.
         ploidy -- an integer indicating the number of chromosome copies.
-        numVariants -- an integer indicating how many variants/genotypes/alleles/SNPs this chromosome represents.
-        array -- a numpy array with shape (1, numVariants, ploidy) which is the fundamental data structure
-                 this Class encapsulates.
-    Methods:
-        generate -- uses parameter values to set self.array
+        array -- a numpy array with shape (variants, ploidy)
     '''
     def __init__(self, chromID, positions, genotypes, chromMap):
         self.chromID = chromID
-        self.positions = positions
-        self.genotypes = genotypes
         self.chromMap = chromMap
-        self.strands = None
-        self.generate()
+        self._generate(positions, genotypes)
         self.isChromosome = True # object type validator
     
     @property
@@ -42,45 +36,35 @@ class Chromosome:
         self._chromID = value
     
     @property
-    def positions(self):
-        return self._positions
-    
-    @positions.setter
-    def positions(self, value):
-        if not (isinstance(value, list) or isinstance(value, tuple)):
-            raise TypeError(f"positions must be a list, not '{type(value).__name__}'")
-        if any([ not isinstance(x, int) for x in value ]):
-            raise TypeError(f"All values in positions list must be an integer")
-        # there are more validations we could do, but the inputs to this Class object should be highly validated already
-        self._positions = value
+    def variants(self):
+        variants, ploidy = self.array.shape
+        return variants
     
     @property
-    def genotypes(self):
-        return self._genotypes
+    def ploidy(self):
+        variants, ploidy = self.array.shape
+        return ploidy
     
-    @genotypes.setter
-    def genotypes(self, value):
-        if not (isinstance(value, list) or isinstance(value, tuple)):
-            raise TypeError(f"genotypes must be a list, not '{type(value).__name__}'")
-        if any([ not hasattr(x, "isGenotype") for x in value ]):
-            raise TypeError(f"All values in genotypes list must be a Genotype object")
-        self._genotypes = value
+    @property
+    def shape(self):
+        return self.array.shape
     
-    def generate(self):
+    def _generate(self, positions, genotypes):
         # Validate compatibility of positions and genotypes
-        if len(self.positions) != len(self.genotypes):
-            raise ValueError("Chromosome object has differing lengths in the positions and genotypes lists")
+        if len(positions) != len(genotypes):
+            raise ValueError("Cannot create Chromosome from mismatching positions and genotypes lists")
         
         # Assign each genotype to its closest physical position
-        self.ploidy = self.genotypes[0].ploidy
-        distances = [ [ abs(x - y) for y in self.positions ] for x in self.chromMap.df["bp"] ]
+        distances = [ [ abs(x - y) for y in positions ] for x in self.chromMap.df["bp"] ]
         closest = [ x.index(min(x)) for x in distances ]
-        self.array = np.array([ self.genotypes[genotypeIndex].alleles for genotypeIndex in closest ]).reshape(1, len(closest), self.ploidy)
-        self.numVariants = len(closest)
+        self.array = np.array([ genotypes[genotypeIndex].alleles for genotypeIndex in closest ])
+    
+    def __len__(self):
+        return len(self.array)
     
     def __repr__(self):
-        return "<Chromosome object;chromID='{0}';ploidy={1};numVariants={2}>".format(
+        return "<Chromosome object;chromID='{0}';variants={1};ploidy={2}>".format(
             self.chromID,
-            self.ploidy,
-            self.numVariants
+            self.variants,
+            self.ploidy
         )

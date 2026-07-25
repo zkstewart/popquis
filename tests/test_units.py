@@ -320,8 +320,8 @@ class TestChromosome(unittest.TestCase):
         chromosome2 = Chromosome(chromID, positions, genotypes2, chromMap)
         
         # Assert
-        self.assertEqual((1, length, ploidy1), chromosome1.array.shape)
-        for i, gt in enumerate(chromosome1.array[0]):
+        self.assertEqual((length, ploidy1), chromosome1.array.shape)
+        for i, gt in enumerate(chromosome1.array):
             if i <= transitionPoints[0]:
                 self.assertTrue(np.array_equal(gt, genotypeTransitions1[0]))
             elif i <= transitionPoints[1]:
@@ -329,8 +329,8 @@ class TestChromosome(unittest.TestCase):
             else:
                 self.assertTrue(np.array_equal(gt, genotypeTransitions1[2]))
         
-        self.assertEqual((1, length, ploidy2), chromosome2.array.shape)
-        for i, gt in enumerate(chromosome2.array[0]):
+        self.assertEqual((length, ploidy2), chromosome2.array.shape)
+        for i, gt in enumerate(chromosome2.array):
             if i <= transitionPoints[0]:
                 self.assertTrue(np.array_equal(gt, genotypeTransitions2[0]))
             elif i <= transitionPoints[1]:
@@ -358,8 +358,8 @@ class TestGenome(unittest.TestCase):
         chromosome2 = Chromosome(chromID2, positions, genotypes2, chromMap2)
         
         genome = Genome()
-        genome.add(chromosome1)
-        genome.add(chromosome2)
+        genome[chromID1] = chromosome1
+        genome[chromID2] = chromosome2
         
         # Assert
         self.assertEqual(chromosome1.array.shape[1] + chromosome2.array.shape[1], genome.array.shape[1])
@@ -372,7 +372,8 @@ class TestGenome(unittest.TestCase):
     
     def test_when_invalid(self):
         # Arrange
-        chromID = "chr1"
+        chromID1 = "chr1"
+        chromID2 = "chr2"
         positions = [50, 100, 150]
         length = 200
         cmMbp = 1
@@ -382,17 +383,19 @@ class TestGenome(unittest.TestCase):
         genotypeTransitions1 = [[0,0], [0,1], [1,1]]
         genotypeTransitions2 = [[0,0,0,0], [0,0,1,1], [1,1,1,1]]
         
-        chromMap = ChromosomeMap(chromID, length, cmMbp, snpMbp, positions) # 1 SNP per bp
+        chromMap = ChromosomeMap(chromID1, length, cmMbp, snpMbp, positions) # 1 SNP per bp
         genotypes1 = [Genotype("0/0"), Genotype("0/1"), Genotype("1/1")]
         genotypes2 = [Genotype("0/0/0/0"), Genotype("0/0/1/1"), Genotype("1/1/1/1")]
         
         # Act
-        chromosome1 = Chromosome(chromID, positions, genotypes1, chromMap)
-        chromosome2 = Chromosome(chromID, positions, genotypes2, chromMap)
+        chromosome1 = Chromosome(chromID1, positions, genotypes1, chromMap)
+        chromosome2 = Chromosome(chromID1, positions, genotypes2, chromMap)
         genome = Genome()
-        genome.add(chromosome1)
+        genome[chromID1] = chromosome1
+        with self.assertRaises(KeyError): # cannot store the same chromID twice
+            genome[chromID1] = chromosome1
         with self.assertRaises(ValueError): # ploidy incompatibility
-            genome.add(chromosome2)
+            genome[chromID2] = chromosome2
 
 class TestChromosomeMap(unittest.TestCase):
     def test_when_valid(self):
