@@ -13,7 +13,8 @@ class ChromosomeMap:
         cmMbp -- a float value giving the centiMorgan per Mbp.
         snpMbp -- an integer giving the approximate number of SNPs to be spaced evenly
                  across each Mbp of genome length; default is 1000.
-        markers -- a list or set of Marker objects pertaining to this chromosome
+        markerLocations -- a list or set of integers representing the bp position of a
+                           marker in this chromosome
     Properties:
         df -- a pandas DataFrame representing a genetic map with physical and centimorgans
               distances as well as indication of marker locations
@@ -25,7 +26,7 @@ class ChromosomeMap:
         self.length = length
         self.cmMbp = cmMbp
         self.snpMbp = snpMbp
-        self._generate(set(markerLocations)) # sets self.df
+        self._create_df(set(markerLocations)) # sets self.df
         self.isChromosomeMap = True # object type validator
     
     @property
@@ -80,7 +81,7 @@ class ChromosomeMap:
     def markers(self):
         return self.df[self.df["Marker"]]
     
-    def _generate(self, markerLocations):
+    def _create_df(self, markerLocations):
         # Validate markerLocations
         if not (isinstance(markerLocations, list) or isinstance(markerLocations, set)):
             raise TypeError(f"markerLocations must be a list or set, not '{type(markerLocations).__name__}'")
