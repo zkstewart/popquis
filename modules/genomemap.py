@@ -8,32 +8,62 @@ import pandas as pd
 class GenomeMap:
     '''
     Properties:
-        chromIDs -- a set of strings indicating which ChromosomeMap objects this Class has ingested.
+        chromIDs -- a list of strings indicating which ChromosomeMap objects this Class has ingested.
         df -- a pandas DataFrame suitable for chromax handling.
-    Methods:
-        add -- ingests a ChromosomeMap object and creates this GenomeMap object out of its composition
+        markers -- a convenience function to return the rows of self.df that are
+                   a marker
     '''
     def __init__(self):
-        self.chromIDs = set()
-        self.df = None
+        self.chromosomes = {}
+        self._df = None
+        self._wasUpdated = False
         self.isGenomeMap = True # object type validator
     
-    def add(self, chromMapObj):
+    @property
+    def chromIDs(self):
+        return list(self.chromosomes.keys())
+    
+    @property
+    def df(self):
+        # Create the chromosome-spanning df on demand
+        if self._df is None or self._wasUpdated:
+            _df = None
+            for chromID, chromosomeMap in self.chromosomes.items():
+                if _df is None:
+                    _df = chromosomeMap.df.copy()
+                else:
+                    _df = pd.concat((_df, chromosomeMap.df))
+                    _df.reset_index(drop=True, inplace=True)
+            self._df = _df
+            self._wasUpdated = False
+        return self._df
+    
+    @property
+    def markers(self):
+        if self.df is not None:
+            return self.df[self.df["Marker"]]
+        else:
+            return None
+    
+    def __setitem__(self, key, value):
         # Validate object type
-        if not hasattr(chromMapObj, "isChromosomeMap"):
+        if not hasattr(value, "isChromosomeMap"):
             raise TypeError(f"GenomeMap object can only receive a ChromosomeMap object, not '{type(chromMapObj).__name__}'")
         
         # Make sure we haven't ingested this ChromosomeMap already
-        if chromMapObj.chromID in self.chromIDs:
-            raise ValueError(f"GenomeMap object has already had '{chromMapObj.chromID}' added into it.")
-        
-        # Store the information
-        if self.df is None:
-            self.df = chromMapObj.df.copy()
-        else:
-            self.df = pd.concat((self.df, chromMapObj.df))
-            self.df.reset_index(drop=True, inplace=True)
-        self.chromIDs.add(chromMapObj.chromID)
+        if key in self.chromosomes:
+            raise KeyError(f"'{key}' already stored in this GenomeMap")
+        self.chromosomes[key] = value
+        self._wasUpdated = True
+    
+    def __getitem__(self, key):
+        if key not in self.chromosomes:
+            return KeyError(f"'{key}' not in this GenomeMap")
+        return self.chromosomes[key]
+    
+    def __iter__(self):
+        for value in self.chromosomes.values():
+            yield value
     
     def __repr__(self):
         return "<GenomeMap object;chromIDs={0}>".format(

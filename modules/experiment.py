@@ -282,10 +282,8 @@ class Critic:
                      [
                          (genomeMapIndexStart, genomeMapIndexEnd),
                          ...
-                     ]; matches up with self.genomeMap
+                     ]
     Methods:
-        _define_qtl_ranges -- initialisation of a Critic object automatically calls this private method
-                              to set self.qtlRanges
         run -- pipeline function for multithreaded computation of the R^2 line fitting statistic
                for assessment of whether the Euclidean distance segregation would enable identification
                of a QTL peak
@@ -377,23 +375,18 @@ class Critic:
     def _define_qtl_ranges(self, breeder):
         '''
         Parameters:
-            breeder -- a Breeder object with .genomeMap and .markerIndices attribute for identifying
-                       the row index of the simulated QTL(s)
+            breeder -- a Breeder object storing a GenomeMap under its .genomeMap attribute
         '''
-        # Store a modified GenomeMap recording the position of any QTLs
-        self.genomeMap = breeder.genomeMap
-        self.genomeMap.df["QTL"] = [ x in breeder.markerIndices for x in list(self.genomeMap.df.index) ]
-        
         # Establish the qtlRanges attribute
         self.qtlRanges = []
-        for chromID in self.genomeMap.chromIDs:
+        for chromID in breeder.genomeMap.chromIDs:
             # Subset the genomeMap's underlying DataFrame for relevant values
-            chromDF = self.genomeMap.df[self.genomeMap.df["CHR.PHYS"] == chromID]
-            chromQTLs = chromDF[chromDF["QTL"]]
+            chromDF = breeder.genomeMap[chromID].df
+            chromMarkers = chromDF[chromDF["Marker"]]
             
             # Iterate through this chromosome to define the range of each QTL
             lastEnd = None
-            rows = list(chromQTLs.itertuples())
+            rows = list(chromMarkers.itertuples())
             for i, row in enumerate(rows):
                 # Get the start point of this QTL region
                 if i == 0:
@@ -410,10 +403,6 @@ class Critic:
                 # Store and iterate
                 self.qtlRanges.append((startIndex, endIndex))
                 lastEnd = endIndex
-        
-        # Sort qtlRanges to match up with self.genomeMap
-        "self.genomeMap.chromIDs is a set, and hence the ordering of chromosomes is not guaranteed"
-        self.qtlRanges.sort(key = lambda x: x[0])
     
     def run(self, configuration):
         '''

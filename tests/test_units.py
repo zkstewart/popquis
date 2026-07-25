@@ -307,7 +307,7 @@ class TestChromosome(unittest.TestCase):
         genotypeTransitions1 = [[0,0], [0,1], [1,1]]
         genotypeTransitions2 = [[0,0,0,0], [0,0,1,1], [1,1,1,1]]
         
-        chromMap = ChromosomeMap(chromID, length, cmMbp, snpMbp) # 1 SNP per bp
+        chromMap = ChromosomeMap(chromID, length, cmMbp, snpMbp, positions) # 1 SNP per bp
         
         genotypes1 = [Genotype("0/0"), Genotype("0/1"), Genotype("1/1")]
         ploidy1 = 2
@@ -348,8 +348,8 @@ class TestGenome(unittest.TestCase):
         cmMbp = 1
         snpMbp = int(1e6)
         
-        chromMap1 = ChromosomeMap(chromID1, length, cmMbp, snpMbp) # 1 SNP per bp
-        chromMap2 = ChromosomeMap(chromID2, length, cmMbp, snpMbp) # 1 SNP per bp
+        chromMap1 = ChromosomeMap(chromID1, length, cmMbp, snpMbp, positions) # 1 SNP per bp
+        chromMap2 = ChromosomeMap(chromID2, length, cmMbp, snpMbp, positions) # 1 SNP per bp
         genotypes1 = [Genotype("0/0"), Genotype("0/1"), Genotype("1/1")]
         genotypes2 = [Genotype("1/2"), Genotype("2/2"), Genotype("2/3")]
         
@@ -382,7 +382,7 @@ class TestGenome(unittest.TestCase):
         genotypeTransitions1 = [[0,0], [0,1], [1,1]]
         genotypeTransitions2 = [[0,0,0,0], [0,0,1,1], [1,1,1,1]]
         
-        chromMap = ChromosomeMap(chromID, length, cmMbp, snpMbp) # 1 SNP per bp
+        chromMap = ChromosomeMap(chromID, length, cmMbp, snpMbp, positions) # 1 SNP per bp
         genotypes1 = [Genotype("0/0"), Genotype("0/1"), Genotype("1/1")]
         genotypes2 = [Genotype("0/0/0/0"), Genotype("0/0/1/1"), Genotype("1/1/1/1")]
         
@@ -399,6 +399,8 @@ class TestChromosomeMap(unittest.TestCase):
         # Arrange
         chromID = "chr1"
         cmMbp = 3
+        positions = [0] # just make sure every map has a marker at index == 0
+        
         length1 = 100000
         snpMbp1 = 1000 # should equate to 1 SNP every 1000 bp
         
@@ -409,15 +411,15 @@ class TestChromosomeMap(unittest.TestCase):
         snpMbp3 = 1 # should equate to 1 SNP every 1 Mbp
         
         # Act
-        chromMap1 = ChromosomeMap(chromID, length1, cmMbp, snpMbp1)
+        chromMap1 = ChromosomeMap(chromID, length1, cmMbp, snpMbp1, positions)
         nrow1 = len(chromMap1.df)
         expectedNrow1 = length1 // (int(1e6)//snpMbp1)
         
-        chromMap2 = ChromosomeMap(chromID, length2, cmMbp, snpMbp2)
+        chromMap2 = ChromosomeMap(chromID, length2, cmMbp, snpMbp2, positions)
         nrow2 = len(chromMap2.df)
         expectedNrow2 = length2 // (int(1e6)//snpMbp2)
         
-        chromMap3 = ChromosomeMap(chromID, length3, cmMbp, snpMbp3)
+        chromMap3 = ChromosomeMap(chromID, length3, cmMbp, snpMbp3, positions)
         nrow3 = len(chromMap3.df)
         expectedNrow3 = length3 // (int(1e6)//snpMbp3)
         
@@ -431,11 +433,17 @@ class TestChromosomeMap(unittest.TestCase):
         chromID = "chr1"
         length = 1
         cmMbp = 3
-        snpMbp = 1
+        
+        snpMbp1 = 1
+        snpMbp2 = int(1e6)
+        positions1 = [0]
+        positions2 = [100]
         
         # Act & Assert on error
         with self.assertRaises(ValueError): # snpMbp is too sparse for the short length
-            chromMap = ChromosomeMap(chromID, length, cmMbp, snpMbp)
+            chromMap = ChromosomeMap(chromID, length, cmMbp, snpMbp1, positions1)
+        with self.assertRaises(ValueError): # positions doesn't lead to a marker placement
+            chromMap = ChromosomeMap(chromID, length, cmMbp, snpMbp2, positions2)
 
 class TestGenomeMap(unittest.TestCase):
     def test_when_valid(self):
@@ -444,6 +452,8 @@ class TestGenomeMap(unittest.TestCase):
         chromID2 = "chr2"
         chromID3 = "chr3"
         cmMbp = 3
+        positions = [0]
+        
         length1 = 100000
         snpMbp1 = 1000 # should equate to 1 SNP every 1000 bp
         
@@ -454,14 +464,14 @@ class TestGenomeMap(unittest.TestCase):
         snpMbp3 = 1 # should equate to 1 SNP every 1 Mbp
         
         # Act
-        chromMap1 = ChromosomeMap(chromID1, length1, cmMbp, snpMbp1)
-        chromMap2 = ChromosomeMap(chromID2, length2, cmMbp, snpMbp2)
-        chromMap3 = ChromosomeMap(chromID3, length3, cmMbp, snpMbp3)
+        chromMap1 = ChromosomeMap(chromID1, length1, cmMbp, snpMbp1, positions)
+        chromMap2 = ChromosomeMap(chromID2, length2, cmMbp, snpMbp2, positions)
+        chromMap3 = ChromosomeMap(chromID3, length3, cmMbp, snpMbp3, positions)
         
         genomeMap = GenomeMap()
-        genomeMap.add(chromMap1)
-        genomeMap.add(chromMap2)
-        genomeMap.add(chromMap3)
+        genomeMap[chromID1] = chromMap1
+        genomeMap[chromID2] = chromMap2
+        genomeMap[chromID3] = chromMap3
         
         # Assert
         self.assertEqual(len(chromMap1.df) + len(chromMap2.df) + len(chromMap3.df), len(genomeMap.df))
@@ -475,11 +485,12 @@ class TestGenomeMap(unittest.TestCase):
 class TestPopulation(unittest.TestCase):
     def test_when_valid(self):
         # Arrange
-        individual1 = np.array([0, 1, 0, 1, 0, 1]).reshape(1, 3, 2) # 3 heterozygous genotypes
-        individual2 = np.array([1, 2, 1, 2, 1, 2]).reshape(1, 3, 2) # 3 heterozygous genotypes
-        
+        cleanup()
         os.makedirs(tmpDir, exist_ok=True)
         tmpFile = os.path.join(tmpDir, "tmp.npy")
+        
+        individual1 = np.array([0, 1, 0, 1, 0, 1]).reshape(1, 3, 2) # 3 heterozygous genotypes
+        individual2 = np.array([1, 2, 1, 2, 1, 2]).reshape(1, 3, 2) # 3 heterozygous genotypes
         
         # Act
         pop = Population(tmpFile)
@@ -496,9 +507,10 @@ class TestPopulation(unittest.TestCase):
         
         # Clean up
         os.unlink(tmpFile)
-
+    
     def test_when_invalid(self):
-         # Arrange
+        # Arrange
+        cleanup()
         os.makedirs(tmpDir, exist_ok=True)
         tmpFile = os.path.join(tmpDir, "tmp.npy")
         
@@ -514,15 +526,16 @@ class TestPopulation(unittest.TestCase):
 class TestBreeder(unittest.TestCase):
     def test_when_valid(self):
         # Arrange
+        cleanup()
+        os.makedirs(tmpDir, exist_ok=True)
+        locations = Locations(tmpDir)
+        
         cmMbp = 3.0
         genotype1 = [Genotype("0/0"), Genotype("0/1"), Genotype("0/1")] # parent1, parent2, offspring
         positions = [0]
         edgeBp = 50
         positions = [ ("chr1", x) for x in positions ]
         combinationEvaluator = Combination("1")
-        
-        os.makedirs(tmpDir, exist_ok=True)
-        locations = Locations(tmpDir)
         
         # Act
         breeder = Breeder()
@@ -531,23 +544,27 @@ class TestBreeder(unittest.TestCase):
         
         # Assert
         self.assertEqual(len(breeder.genomeMap.df), (edgeBp*2) + (positions[-1][-1] + 1))
+        
+        markerRow = breeder.genomeMap.markers
+        self.assertEqual(len(markerRow), 1) # should be one marker row
+        
         breeder.produce_progeny(locations, combinationEvaluator, batchSize=100, minimumGroupSize=1, seed=1234) # no error is a pass
         
         # Clean up
-        os.unlink(locations.group1Npy)
-        os.unlink(locations.group2Npy)
+        cleanup()
     
     def test_when_invalid(self):
         # Arrange
+        cleanup()
+        os.makedirs(tmpDir, exist_ok=True)
+        locations = Locations(tmpDir)
+        
         cmMbp = 3.0
         genotype1 = [Genotype("0/0"), Genotype("1/1"), Genotype("0/1")] # parent1, parent2, offspring
         positions = [0]
         edgeBp = 50
         positions = [ ("chr1", x) for x in positions ]
         combinationEvaluator = Combination("1")
-        
-        os.makedirs(tmpDir, exist_ok=True)
-        locations = Locations(tmpDir)
         
         # Act
         breeder = Breeder()
@@ -605,6 +622,7 @@ class TestConfiguration(unittest.TestCase):
 class TestCoordinator(unittest.TestCase):
     def test_when_valid(self):
         # Arrange
+        cleanup()
         os.makedirs(tmpDir, exist_ok=True)
         locations = Locations(tmpDir)
         open(locations.group1Npy, "w").close()
@@ -719,6 +737,7 @@ class TestCoordinator(unittest.TestCase):
     
     def test_run(self):
         # Arrange
+        cleanup()
         os.makedirs(tmpDir, exist_ok=True)
         locations = Locations(tmpDir)
         
@@ -760,6 +779,7 @@ class TestCoordinator(unittest.TestCase):
     
     def test_when_invalid(self):
         # Arrange
+        cleanup()
         os.makedirs(tmpDir, exist_ok=True)
         locations = Locations(tmpDir)
         
@@ -770,6 +790,7 @@ class TestCoordinator(unittest.TestCase):
 class TestSpreadsheet(unittest.TestCase):
     def test_unfixed_variable_setting(self):
         # Arrange
+        cleanup()
         os.makedirs(tmpDir, exist_ok=True)
         locations = Locations(tmpDir)
         
@@ -954,6 +975,7 @@ class TestCalculatorEuclideanDistance(unittest.TestCase):
 class TestCritic(unittest.TestCase):
     def test_when_valid(self):
         # Arrange
+        cleanup()
         os.makedirs(tmpDir, exist_ok=True)
         locations = Locations(tmpDir)
         
@@ -1010,6 +1032,7 @@ class TestCritic(unittest.TestCase):
     
     def test_run(self):
         # Arrange
+        cleanup()
         os.makedirs(tmpDir, exist_ok=True)
         locations = Locations(tmpDir)
         

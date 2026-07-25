@@ -71,18 +71,18 @@ class Breeder:
         self.genomeMap = GenomeMap()
         self.parent1 = Genome()
         self.parent2 = Genome()
-        markers = []
+        offspringGenotypes = []
         for chromID, value in chromosomeData.items():
+            # Establish marker details
             chromPositions, chromGenotypes = zip(*value)
+            chromLength = (edgeBp * 2) + (chromPositions[-1] + 1) # positions are ordered so get the last; 0-based so plus one
+            chromPositions = [ x + edgeBp for x in chromPositions ] # marker positions need to update w/r/t the edge buffer length
             
             # Establish the genetic map for this chromosome
-            chromLength = (edgeBp * 2) + (chromPositions[-1] + 1) # positions are ordered so get the last; 0-based so plus one
-            chromosomeMap = ChromosomeMap(chromID, chromLength, cmMbp, snpMbp)
-            self.genomeMap.add(chromosomeMap)
+            chromosomeMap = ChromosomeMap(chromID, chromLength, cmMbp, snpMbp, chromPositions)
+            self.genomeMap[chromID] = chromosomeMap
             
             # Establish the parental genomes for this chromosome
-            chromPositions = [ x + edgeBp for x in chromPositions ] # need to add the left edge buffer length
-            
             parent1Genotypes = [ x[0] for x in chromGenotypes ]
             parent1 = Chromosome(chromID, chromPositions, parent1Genotypes, chromosomeMap)
             self.parent1.add(parent1)
@@ -91,15 +91,15 @@ class Breeder:
             parent2 = Chromosome(chromID, chromPositions, parent2Genotypes, chromosomeMap)
             self.parent2.add(parent2)
             
-            # Record the markers for segregating offspring
-            markers += [ (chromID, x, y[2]) for x, y in zip(chromPositions, chromGenotypes) ]
+            # Hold onto the markers for segregating offspring identification
+            offspringGenotypes += [ x[2] for x in chromGenotypes ]
         
-        # Relate the markers to the underlying GenomeMap
+        # Relate the offspring marker genotypes to the underlying GenomeMap
+        "Doing this gives us the indices spanning across all chromosomes that compose the GenomeMap"
         self.markerIndices = []
         self.markerAlleles = []
-        for chromID, position, genotype in markers:
-            row = self.genomeMap.df[(self.genomeMap.df["CHR.PHYS"] == chromID) & (self.genomeMap.df["bp"] == position)]
-            self.markerIndices.append(int(row.index[0]))
+        for genotype, rowTuple in zip(offspringGenotypes, self.genomeMap.markers.itertuples()):
+            self.markerIndices.append(rowTuple.Index)
             self.markerAlleles.append(genotype.alleles)
     
     def produce_progeny(self, locations, combinationEvaluator, batchSize=1000, minimumGroupSize=10000, seed=1234):
@@ -139,7 +139,7 @@ class Breeder:
                 if isGroup1:
                     numGroup1 += 1
                     if (group1.individuals is None) or (group1.individuals < minimumGroupSize):
-                        group1.add(offspring.reshape(1, *offspring.shape))
+                        group1.add(offspring.reshape(1, *offspring.shape)) # must add a dimension so AppendArray handles correctly
                 else:
                     numGroup2 += 1
                     if (group2.individuals is None) or (group2.individuals < minimumGroupSize):
