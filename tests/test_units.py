@@ -23,11 +23,13 @@ from modules.genotype import Genotype # note that the Genotype class is implicit
 from modules.locations import Locations
 from modules.parsing import parse_genotypes, parse_combination, parse_linkage, parse_qtl_encoding
 from modules.population import Population
+from modules.simulator import MeiosisSimulator
 from modules.spreadsheet import Spreadsheet
 from modules.statistics import RandomNumberGenerator, Calculator
 from modules.template import Template
 
 # Specify data locations
+__file__ = "/mnt/c/git/popquis/tests/test_units.py"
 testDir = os.path.dirname(os.path.abspath(__file__))
 tmpDir = os.path.join(testDir, "tmp")
 
@@ -755,8 +757,10 @@ class TestCoordinator(unittest.TestCase):
         
         breeder = Breeder()
         breeder.establish(positions, genotypes, cmMbp, snpMbp=snpMbp, edgeBp=edgeBp)
-        breeder.produce_progeny(locations, combinationEvaluator, batchSize=100,
-                                minimumGroupSize=10, seed=1234)
+        breeder.produce_progeny(locations, combinationEvaluator,
+                                batchSize=100,
+                                minimumGroupSize=50, # chosenPopsize below goes up to 50
+                                seed=1234)
         
         configuration = Configuration(popSize)
         chosenBalance, chosenError = (0.5, 0.0)
@@ -1168,6 +1172,58 @@ class TestTemplate(unittest.TestCase):
         self.assertAlmostEqual(score3, expected3, places=2)
         self.assertAlmostEqual(score4, expected4, places=2)
         self.assertAlmostEqual(score5, expected5, places=2)
+
+class TestMeiosisSimulator(unittest.TestCase):
+    def test_basic(self):
+        """Most simple test to assert that recombination is being modelled in some way,
+        and that the data structures like Genome and GenomeMap are properly working
+        with the composition of underlying Chromosome and ChromosomeMap classes"""
+        cleanup()
+        os.makedirs(tmpDir, exist_ok=True)
+        locations = Locations(tmpDir)
+        
+        # Arrange
+        chromID1 = "chr1"
+        chromID2 = "chr2"
+        positions = [50, 100, 150]
+        length = 200
+        cmMbp = 3 * 1000000
+        snpMbp = int(1e6)
+        genotypeHomRef = Genotype("0/0")
+        genotypeHet = Genotype("0/1")
+        genotypeHomAlt = Genotype("1/1")
+        
+        chromMap1 = ChromosomeMap(chromID1, length, cmMbp, snpMbp, positions) # 1 SNP per bp
+        chromMap2 = ChromosomeMap(chromID2, length, cmMbp, snpMbp, positions) # 1 SNP per bp
+        chromosome1 = Chromosome(chromID1, positions, [genotypeHet]*len(positions), chromMap1)
+        chromosome2 = Chromosome(chromID2, positions, [genotypeHet]*len(positions), chromMap2)
+        
+        genomeMap = GenomeMap()
+        genomeMap[chromID1] = chromMap1
+        genomeMap[chromID2] = chromMap2
+        
+        parent1 = Genome()
+        parent1[chromID1] = chromosome1
+        parent1[chromID2] = chromosome2
+        
+        parent2 = Genome()
+        parent2[chromID1] = chromosome1
+        parent2[chromID2] = chromosome2
+        
+        batchSize = 1
+        ploidy = 2
+        expectedShape = (batchSize, length*2, ploidy)
+        
+        # Act
+        simulator = MeiosisSimulator(parent1, parent2, genomeMap)
+        offspring = simulator.cross(batchSize=1)
+        
+        # Assert
+        self.assertEqual(offspring.shape, expectedShape)
+        self.assertTrue(not np.array_equal(offspring[0,:, 0], offspring[0,:, 1])) # strands differ
+        
+        uniqueAlleles = set([ tuple(x) for x in offspring[0]])
+        self.assertTrue(len(uniqueAlleles) != 1) # recombination is occurring
 
 if __name__ == '__main__':
     cleanup()

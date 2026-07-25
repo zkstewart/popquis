@@ -24,12 +24,34 @@ class RandomNumberGenerator:
     
     def generate_random_indices(self, rangeMax, numberOfIndices):
         '''
+        Encapsulates np.random.default_rng().choice with replace=False
+        
         Parameters:
             rangeMax -- an integer giving the upper boundary of indices to generate (exclusive);
                         in other words, treat this like a normal range(0, upper)
             numberOfIndices -- an integer giving the number of indices to generate
         '''
         return self._rngenerator.choice(rangeMax, size=numberOfIndices, replace=False)
+    
+    def integers(self, low, high):
+        '''
+        Encapsulates np.random.default_rng().integers
+        
+        Parameters:
+            low -- minimum integer value to generate (inclusive)
+            high -- maximum integer vlaue to generate (exclusive)
+        '''
+        return self._rngenerator.integers(low, high)
+    
+    def gamma(self, shape, scale):
+        '''
+        Encapsulates np.random.default_rng().gamma
+        
+        Parameters:
+            shape -- tbd
+            scale -- tbd
+        '''
+        return self._rngenerator.gamma(shape=shape, scale=scale)
 
 class Calculator:
     '''

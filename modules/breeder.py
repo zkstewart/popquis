@@ -14,7 +14,7 @@ from modules.chromosomemap import ChromosomeMap
 from modules.genome import Genome
 from modules.genomemap import GenomeMap
 from modules.population import Population
-from modules.simulator import ChromaxSimulator
+from modules.simulator import ChromaxSimulator, MeiosisSimulator
 
 class Breeder:
     '''
@@ -125,7 +125,8 @@ class Breeder:
         group2.load()
         
         # Simulate progeny in batches to attain a pre-requisite population size for each group
-        simulator = ChromaxSimulator(self.parent1, self.parent2, self.genomeMap)
+        #simulator = ChromaxSimulator(self.parent1, self.parent2, self.genomeMap)
+        simulator = MeiosisSimulator(self.parent1, self.parent2, self.genomeMap)
         while (group1.individuals is None or group1.individuals < minimumGroupSize) or (group2.individuals is None or group2.individuals < minimumGroupSize):
             f1 = simulator.cross(batchSize=batchSize)
             
