@@ -298,55 +298,45 @@ class Critic:
         self.isCritic = True # object type validator
     
     @staticmethod
-    def generate_templates(length):
-        triangle = Template.generate_triangle_template(length)
-        plateau1 = Template.generate_plateau_template(length, plateauFraction=0.2)
-        plateau2 = Template.generate_plateau_template(length, plateauFraction=0.3)
-        plateau3 = Template.generate_plateau_template(length, plateauFraction=0.4)
-        return triangle, plateau1, plateau2, plateau3
-    
-    @staticmethod
-    def score(y, templates, significantChange=0.5):
+    def score(y):
         '''
-        Evaluate whether the data points form a triangular shape where the centre is a peak/maximum and
-        the edges are a trough/minimum. The data is normalised to be mostly scale-invariant, and is
-        subsequently compared to a "triangular shape template" to assess the shape of the data.
-        The magnitude of the difference between the central peak and the edge minima is factored
-        in to ensure that the difference is biologically meaningful and visually identifable if
-        the data were plotted.
+        Evaluate whether the data points match a guassian Template shape, whereby a match
+        would indicate a visibly identifiable peak in the segregation statistics at a
+        central QTL.
         
-        Employs two shape templates:
-            1) a triangle with the minimum y value at the left and right edges, increasing
-               in a straight line to the maximum y value at the centre.
-            2) same as (1) except that the left and right edges are allowed to plateau for
-               some distance before the straight line climb to the central maximum occurs.
-        
-        The correlation between the normalised data and the templated shape is computed as a
-        measurement of whether the original y values would enable clear visual identification
-        of a QTL.
+        The magnitude of the difference between the central peak and the edge minima is
+        factored in to ensure that the difference is biologically meaningful and visually
+        identifable if the data were plotted.
         
         Parameters:
             y -- a numpy array of numeric values for the ED^4 segregation of the SNPs
-            significantChange -- a float value giving the amount of change in the ED^4
-                                 statistic needed for a change to be meaningfully visible;
-                                 used to penalise changes that are less than this amount
+            templates -- a list of one or more Template objects for assessing the shape
+                         of the data distribution
         Returns:
-            templateScore -- a float ranging from zero (worst) to one (best) measuring a QTL's
-                             ability to be identified in the data
+            score -- a float ranging from zero (worst) to one (best) measuring a QTL's
+                     ability to be identified in the data
+            width -- a float ranging from zero (pointy) to 0.5 (broad) measuring the QTL's
+                     genomic resolution
         '''
         if np.isclose(np.std(y), 0): # isclose to tolerate floating point inaccuracy
-            return 0 # a flat line should have 0 score; also speed up program and avoid divide by zero error later
+            return 0, None # a flat line should have 0 score; also speed up program and avoid divide by zero error later
         
-        prominence = min(np.ptp(y) / significantChange, 1.0)
+        # Calculate the score penalisation factor for low-significance peaks
+        """We need the change in ED^4 segregation to be meaningfully visible. If there is
+        a peak that is 2x the median value, that should theoretically be visible in a
+        plot of the data points."""
+        baseline = np.median(y)
+        if baseline > 0:
+            magnitudeScalingFactor = min(np.ptp(y) / baseline, 1.0) # if peak to peak is >= median, no penalisation occurs
+        else:
+            magnitudeScalingFactor = 1.0 # any increase over zero is significant
         
-        scores = []
-        for template in templates:
-            fittedShape = Template.fit(y, template)
-            score = fittedShape * prominence
-            scores.append(score)
+        # Fit a Template against this ED distribution
+        correlation, width = Template.fit(y)
+        score = correlation * magnitudeScalingFactor
         
         # Return the optimal score
-        return max(scores)
+        return score, width
     
     @staticmethod
     def scores_to_strength(scores):
@@ -432,21 +422,24 @@ class Critic:
                 numPopSizes, numBootstraps, numVariants = qtlED.shape
                 
                 # Assess each replication of this parameter combination
-                templates = Critic.generate_templates(numVariants)
                 scores = []
+                widths = []
                 for popSizeArray in qtlED:
                     for replicateArray in popSizeArray:
-                        score = Critic.score(replicateArray, templates, significantChange=0.5)
+                        score, width = Critic.score(replicateArray)
                         scores.append(score)
+                        widths.append(width)
                 
                 # Reshape scores into an array that matches the QTL shape
-                scores = np.stack(np.split(np.array(scores), numPopSizes))  # shape = (popsize, bootstraps)
+                scores = np.stack(np.split(np.array(scores), numPopSizes)) # shape = (popsize, bootstraps)
+                widths = np.stack(np.split(np.array(widths), numPopSizes))
                 
                 # Also summarise scores as the signal strength
                 strengths = Critic.scores_to_strength(scores)
                 
                 # Store results in Spreadsheet
                 setattr(spreadsheet, f"scores{i+1}", scores)
+                setattr(spreadsheet, f"widths{i+1}", scores)
                 setattr(spreadsheet, f"strengths{i+1}", strengths)
             
             # Store the results into the Spreadsheet

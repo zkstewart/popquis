@@ -5,71 +5,54 @@
 
 import numpy as np
 
+from scipy.optimize import minimize_scalar
+
 class Template:
     '''
-    Args:
-        length -- an integer giving the length/size of the template for matching against
-                  an equivalently sized numpy array
-    Attributes:
-        triangle -- a numpy array of a triangle shape template (^)
-        plateau -- a numpy array of a plateau-triangle-plateau shape template (_^_)
     Methods:
-        _generate_templates -- private method called on object initialisation to set each template
-        fit -- 
+        generate_gaussian_template -- produces a numpy array with a Guassian distribution
+                                      of numbers from 0 to 1
+        fit -- fits a numpy array of statistical values against a Guassian template
+               to measure its correlation to the template shape and how "pointy" that
+               template is.
     '''
     @staticmethod
-    def generate_triangle_template(length):
+    def generate_gaussian_template(length, peakFraction=0.20):
         '''
-        Provides the expected shape of a normalised array whereby edges are zero
-        and the centre is 1.
-        
-        Shape is akin to: ^
+        Generates a Guassian distribution with a peak of 1 at the centre declining
+        down to zero at the edges.
         
         Parameters:
-            length -- an integer giving the length of an array
+            length -- an integer giving the length of an array to have a Guassian
+                      template created for
+            peakFraction -- a float giving the central proportion of the Guassian
+                            shape that should be >= 0.5; in other words, be in
+                            excess of the full width at half maximum (FWHM)
         Returns:
-            template -- a numpy array giving the normalised shape of an array
-                        that matches a triangle
+            template -- a numpy array giving the Guassian distribution from 0 to 1
         '''
-        x = np.linspace(-1, 1, length)
-        return 1 - np.abs(x)
-    
-    @staticmethod
-    def generate_plateau_template(length, plateauFraction=0.25):
-        '''
-        Provides the expected shape of a normalised array whereby edges are zero
-        and remain as zero up to plateauFraction of the length of an array before
-        beginning a straight line climb to 1 at the centre.
+        if not (0 < peakFraction < 1):
+            raise ValueError("peakFraction must be between 0 and 1")
         
-        Shape is akin to: _^_
-        
-        Parameters:
-            length -- an integer giving the length of an array
-            plateauFraction -- a float giving the amount of length that should be
-                               a flat (minimum) plateau at the left and right edges
-        Returns:
-            template -- a numpy array giving the normalised shape of an array
-                        that matches a triangle with plateaus at each edge
-        '''
-        if plateauFraction >= 0.5:
-            raise ValueError("plateauTemplate cannot have a plateau extend up to or beyond half the length of an array")
-        
-        # Position of inflection points of the plateau-peak-plateau shape
-        left = int(length * plateauFraction)
-        right = length - left
+        x = np.arange(length)
         centre = length // 2
         
-        # Form the template
-        template = np.zeros(length) # start->left and right->end are implicitly set as a flat zero here
-        template[left:centre] = np.linspace(0, 1, num=centre-left, endpoint=False)
-        template[centre:right] = np.linspace(1, 0, num=right-centre, endpoint=False)
+        fwhm = peakFraction * length # how wide should our FWHM be
+        sigma = fwhm / 2.355 # 2.355 is an approximate constant related to the FWHM
+        
+        template = np.exp(
+            -((x - centre) ** 2) /
+            (2 * sigma**2)
+        )
         return template
     
     @staticmethod
-    def fit(y, template):
+    def _correlate(y, template):
         '''
-        Calculate the Pearson product-moment correlation coefficient between an array of values
-        and a corresponding array of Template'd values.
+        Calculate the Pearson product-moment correlation coefficient between an array of
+        values (e.g., Euclidean distance floats) and a Guassian distribution with variable
+        width. The result is a value ranging from -1 to +1 representing negative or positive
+        correlation strength between the values and the Guassian distribution shape.
         '''
         try:
             if y.shape != template.shape:
@@ -85,3 +68,52 @@ class Template:
             (y - y.mean()) / y_std,
             (template - template.mean()) / template.std()
         )[0, 1]
+    
+    @staticmethod
+    def fit(y, minimum=0.01, maximum=0.5):
+        '''
+        Fit a numpy array of numeric values against a QTL-like peak as modelled through
+        an optimised Guassian function. This function is optimised for a FWHM proportion
+        ranging from minimum -> maximum.
+        
+        The resulting score is the Pearson correlation from -1 to +1 indicating how well
+        the number distribution matches against a modelled Guassian shape. It additionally
+        returns the FWHM proportion that provided this optimised Pearson correlation value.
+        In this respect, a lower value means the QTL is more of a "spike" and a larger
+        value indicates a more gradual slope towards the edges.
+        
+        Parameters:
+            y -- a numpy array of numeric values to have fitted against a Guassian distribution
+            minimum -- a float value giving the minimum proportion of the data distribution
+                       to be part of the FWHM; default == 0.01 which is 1%
+            maximum -- a float value giving the maximum proportion of the data distribution
+                       to be part of the FWHM; default == 0.5 which is 50%
+        Returns:
+            correlation -- a float of the Pearson correlation
+            width -- a float of the FWHM between minimum -> maximum that provided optimised
+                     fitting
+        '''
+        def _objective(peakFraction):
+            template = Template.generate_gaussian_template(
+                len(y),
+                peakFraction
+            )
+            return -Template._correlate(y, template)
+        
+        if not (0 < minimum < 1):
+            raise ValueError("Template.fit minimum must be between 0 and 1")
+        if not (0 < maximum < 1):
+            raise ValueError("Template.fit maximum must be between 0 and 1")
+        if not minimum < maximum:
+            raise ValueError("Template.fit maximum must be greater than minimum")
+        
+        result = minimize_scalar(
+            _objective,
+            bounds=(minimum, maximum),
+            method="bounded"
+        )
+        
+        bestCorrelation = -result.fun
+        bestWidth = result.x
+        
+        return bestCorrelation, bestWidth
