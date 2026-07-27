@@ -334,12 +334,15 @@ class Critic:
             peakFactor = y[0] / maxY # is the left edge a peak
         slopeFactor = (medianY / maxY) * (minY / medianY) 
         
-        medianFraction = (medianY - minY) / (maxY - minY) # is the minimum closer to the median than the maximum
-        slopeFactor = np.clip(
-            2 * (1 - medianFraction), # if median is closer to minimum, 1-medianFraction becomes > 0.5
-            0, # this should never activate, clipping is solely to prevent a value > 1
-            1 # if median is closer to minimum, we get a factor > 1 which isn't suitable
-        )
+        if maxY != minY:
+            medianFraction = (medianY - minY) / (maxY - minY) # is the minimum closer to the median than the maximum
+            slopeFactor = np.clip(
+                2 * (1 - medianFraction), # if median is closer to minimum, 1-medianFraction becomes > 0.5
+                0, # this should never activate, clipping is solely to prevent a value > 1
+                1 # if median is closer to minimum, we get a factor > 1 which isn't suitable
+            )
+        else:
+            slopeFactor = 0 # a flat line has no slope
         
         magnitudeFactor = min((maxY - minY) / (minY / 2), 1.0)
         
@@ -367,7 +370,7 @@ class Critic:
                      genomic resolution
         '''
         if np.isclose(np.std(y), 0): # isclose to tolerate floating point inaccuracy
-            return 0, None # a flat line should have 0 score; also speed up program and avoid divide by zero error later
+            return 0, None, None # a flat line should have 0 score; also speed up program and avoid divide by zero error later
         
         # Fit a Template against this ED distribution
         leftCorrelation, rightCorrelation, leftWidth, rightWidth = Template.fit(y)

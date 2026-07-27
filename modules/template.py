@@ -51,12 +51,16 @@ class Template:
             raise ValueError("y and/or template are not numpy arrays and have no .shape attribute")
         
         y_std = y.std()
-        if y_std == 0:
+        if np.isclose(y_std, 0):
+            return 0
+        
+        template_std = template.std()
+        if np.isclose(template_std, 0):
             return 0
         
         return np.corrcoef(
             (y - y.mean()) / y_std,
-            (template - template.mean()) / template.std()
+            (template - template.mean()) / template_std
         )[0, 1]
     
     @staticmethod
