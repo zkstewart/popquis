@@ -1026,16 +1026,14 @@ class TestCritic(unittest.TestCase):
             1.01,
             *list(np.ones(19))
         ])
-        triangle = Template.generate_triangle_template(40)
         
         # Act
-        templateScore = Template.fit(y4, triangle) # np.float64(0.3779644730092271)
-        criticScore1 = Critic.score(y4, [triangle], significantChange=0.5) # np.float64(0.007559289460184549)
-        criticScore2 = Critic.score(y4, [triangle], significantChange=4) # np.float64(0.0009449111825230686)
+        leftCorr, rightCorr, leftWidth, rightWidth = Template.fit(y4) # near perfect
+        criticScore, leftWidth, rightWidth = Critic.score(y4) # np.float64(0.02000000000000001)
         
         # Assert
-        self.assertTrue(templateScore > criticScore1) # Critic penalises the lack of magnitude/prominence
-        self.assertTrue(criticScore1 > criticScore2) # significantChange scales the amount of penalty
+        self.assertTrue(leftCorr > criticScore) # Critic penalises the lack of magnitude/prominence
+        self.assertAlmostEqual(leftCorr, 1) # without Critic penalisation the correlation is very good
     
     def test_run(self):
         # Arrange
@@ -1107,11 +1105,10 @@ class TestCritic(unittest.TestCase):
         qtlED = resultsArray[:,:,startIndex:endIndex+1]
         numPopSizes, numBootstraps, numVariants = qtlED.shape
         
-        templates = Critic.generate_templates(numVariants)
         scores = []
         for popSizeArray in qtlED:
             for replicateArray in popSizeArray:
-                score = Critic.score(replicateArray, templates, significantChange=0.5)
+                score, leftWidth, rightWidth = Critic.score(replicateArray)
                 scores.append(score)
         
         scores = np.stack(np.split(np.array(scores), numPopSizes)) # shape = (popsize, bootstraps)
@@ -1125,6 +1122,10 @@ class TestCritic(unittest.TestCase):
 
 class TestTemplate(unittest.TestCase):
     def test_when_valid(self):
+        """This test used to make more sense before refactoring the Template
+        to work asymmetrically. Now, it just proves that the asymmetry handling
+        works as expected. The asymmetric distributions show a left and right
+        score that is approximately equal to each other."""
         # Arrange
         y1 = np.array([
             *list(np.linspace(0, 4, 20)),
@@ -1149,29 +1150,17 @@ class TestTemplate(unittest.TestCase):
             *list(np.ones(19))
         ])
         
-        triangle = Template.generate_triangle_template(40) # all arrays have length 40
-        plateau1 = Template.generate_plateau_template(40, plateauFraction=0.25) # plateauFraction matches the actual plateau length
-        plateau2 = Template.generate_plateau_template(40, plateauFraction=0.40)
-        
-        expected1 = np.float64(1.0) # should be a near-perfect fit
-        expected2 = np.float64(0.992) # should be a very good fit; not necessarily perfect due to the two 4's in the centre
-        expected3 = np.float64(0.799) # should be worse than score2 as the plateau is incorrectly sized now
-        expected4 = np.float64(0.933) # should be worse than score2 as the plateau is skewed between left and right
-        expected5 = np.float64(0.378) # should be the worst as the peak is very sudden; magnitude is small but not penalised here
-        
         # Act
-        score1 = Template.fit(y1, triangle) # np.float64(0.9999999999999998)
-        score2 = Template.fit(y2, plateau1) # np.float64(0.9926846128175764)
-        score3 = Template.fit(y2, plateau2) # np.float64(0.7996597916069839)
-        score4 = Template.fit(y3, plateau1) # np.float64(0.9336920057552545)
-        score5 = Template.fit(y4, triangle) # np.float64(0.3779644730092271)
+        leftCorr1, rightCorr1, leftWidth1, rightWidth1 = Template.fit(y1)
+        leftCorr2, rightCorr2, leftWidth2, rightWidth2 = Template.fit(y2)
+        leftCorr3, rightCorr3, leftWidth3, rightWidth3 = Template.fit(y3)
+        leftCorr4, rightCorr4, leftWidth4, rightWidth4 = Template.fit(y4)
         
         # Assert
-        self.assertAlmostEqual(score1, expected1, places=2)
-        self.assertAlmostEqual(score2, expected2, places=2)
-        self.assertAlmostEqual(score3, expected3, places=2)
-        self.assertAlmostEqual(score4, expected4, places=2)
-        self.assertAlmostEqual(score5, expected5, places=2)
+        self.assertAlmostEqual(leftCorr1, rightCorr1, places=2)
+        self.assertAlmostEqual(leftCorr2, rightCorr2, places=2)
+        self.assertAlmostEqual(leftCorr3, rightCorr3, places=1) # the left is a bit worse than the right
+        self.assertAlmostEqual(leftCorr4, rightCorr4, places=2)
 
 class TestMeiosisSimulator(unittest.TestCase):
     def test_basic(self):

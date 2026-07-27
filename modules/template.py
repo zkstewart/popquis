@@ -10,27 +10,14 @@ from scipy.optimize import minimize_scalar
 class Template:
     '''
     Methods:
-        generate_gaussian_template -- produces a numpy array with a Guassian distribution
+        split_gaussian_template -- produces a numpy array with a Guassian distribution
                                       of numbers from 0 to 1
         fit -- fits a numpy array of statistical values against a Guassian template
                to measure its correlation to the template shape and how "pointy" that
                template is.
     '''
     @staticmethod
-    def generate_gaussian_template(length, peakFraction=0.20):
-        '''
-        Generates a Guassian distribution with a peak of 1 at the centre declining
-        down to zero at the edges.
-        
-        Parameters:
-            length -- an integer giving the length of an array to have a Guassian
-                      template created for
-            peakFraction -- a float giving the central proportion of the Guassian
-                            shape that should be >= 0.5; in other words, be in
-                            excess of the full width at half maximum (FWHM)
-        Returns:
-            template -- a numpy array giving the Guassian distribution from 0 to 1
-        '''
+    def split_gaussian_template(length, peakFraction=0.20, left=True):
         if not (0 < peakFraction < 1):
             raise ValueError("peakFraction must be between 0 and 1")
         
@@ -44,7 +31,10 @@ class Template:
             -((x - centre) ** 2) /
             (2 * sigma**2)
         )
-        return template
+        if left:
+            return template[:centre]
+        else:
+            return template[centre:]
     
     @staticmethod
     def _correlate(y, template):
@@ -93,12 +83,16 @@ class Template:
             width -- a float of the FWHM between minimum -> maximum that provided optimised
                      fitting
         '''
-        def _objective(peakFraction):
-            template = Template.generate_gaussian_template(
+        def _objective(peakFraction, isLeft):
+            template = Template.split_gaussian_template(
                 len(y),
-                peakFraction
+                peakFraction,
+                left=isLeft
             )
-            return -Template._correlate(y, template)
+            if isLeft:
+                return -Template._correlate(y[:len(y)//2], template)
+            else:
+                return -Template._correlate(y[len(y)//2:], template)
         
         if not (0 < minimum < 1):
             raise ValueError("Template.fit minimum must be between 0 and 1")
@@ -107,13 +101,23 @@ class Template:
         if not minimum < maximum:
             raise ValueError("Template.fit maximum must be greater than minimum")
         
-        result = minimize_scalar(
+        leftResult = minimize_scalar(
             _objective,
             bounds=(minimum, maximum),
+            args=(True), # isLeft is True
+            method="bounded"
+        )
+        rightResult = minimize_scalar(
+            _objective,
+            bounds=(minimum, maximum),
+            args=(False), # isLeft is False; this isRight
             method="bounded"
         )
         
-        bestCorrelation = -result.fun
-        bestWidth = result.x
+        leftCorrelation = -leftResult.fun
+        rightCorrelation = -rightResult.fun
         
-        return bestCorrelation, bestWidth
+        leftWidth = leftResult.x
+        rightWidth = rightResult.x
+        
+        return leftCorrelation, rightCorrelation, leftWidth, rightWidth

@@ -298,6 +298,54 @@ class Critic:
         self.isCritic = True # object type validator
     
     @staticmethod
+    def penalty(y, left=True):
+        '''
+        Provides a scaling factor / correction / penalty to data distributions
+        that do not provide a meaningfully visible distinction between the minimum
+        and maximum values.
+        
+        Three components are measured when deriving this penalty:
+            1) Is the outside edge of the QTL the minimum value?
+            2) Is the inside/centre of the QTL the maximum value?
+            3) Is the median closer to the minimum value, than it is to the
+               maximum value?
+        
+        The first and second components measure the standard intuitive metric of a QTL;
+        the position of the QTL should have a higher segregation statistic than the
+        outer perimeter of the QTL. The third component is less intuitive, but it provides
+        a heuristic measurement of the slope ascent; a distinct climb to a peak should
+        mean the median is closer to the minimum value, than it is to the maximum value.
+        
+        Gaussian template fitting is performed assymetrically, so we must differentiate
+        between the left and right sides. For the left side of a Template, the left
+        edge is the outside of the QTL and the right side is the centre of the QTL.
+        '''
+        minY = np.min(y)
+        if minY == 0:
+            return 1.0 # any increase over zero is significant
+        maxY = np.max(y)
+        medianY = np.median(y)
+        
+        if left:
+            troughFactor = minY / y[0] # is the left edge a trough
+            peakFactor = y[-1] / maxY # is the right edge a peak
+        else:
+            troughFactor = minY / y[-1] # is the right edge a trough
+            peakFactor = y[0] / maxY # is the left edge a peak
+        slopeFactor = (medianY / maxY) * (minY / medianY) 
+        
+        medianFraction = (medianY - minY) / (maxY - minY) # is the minimum closer to the median than the maximum
+        slopeFactor = np.clip(
+            2 * (1 - medianFraction), # if median is closer to minimum, 1-medianFraction becomes > 0.5
+            0, # this should never activate, clipping is solely to prevent a value > 1
+            1 # if median is closer to minimum, we get a factor > 1 which isn't suitable
+        )
+        
+        magnitudeFactor = min((maxY - minY) / (minY / 2), 1.0)
+        
+        return ( (troughFactor + peakFactor + slopeFactor) / 3 ) * magnitudeFactor
+    
+    @staticmethod
     def score(y):
         '''
         Evaluate whether the data points match a guassian Template shape, whereby a match
@@ -321,22 +369,21 @@ class Critic:
         if np.isclose(np.std(y), 0): # isclose to tolerate floating point inaccuracy
             return 0, None # a flat line should have 0 score; also speed up program and avoid divide by zero error later
         
-        # Calculate the score penalisation factor for low-significance peaks
-        """We need the change in ED^4 segregation to be meaningfully visible. If there is
-        a peak that is 2x the median value, that should theoretically be visible in a
-        plot of the data points."""
-        baseline = np.median(y)
-        if baseline > 0:
-            magnitudeScalingFactor = min(np.ptp(y) / baseline, 1.0) # if peak to peak is >= median, no penalisation occurs
-        else:
-            magnitudeScalingFactor = 1.0 # any increase over zero is significant
-        
         # Fit a Template against this ED distribution
-        correlation, width = Template.fit(y)
-        score = correlation * magnitudeScalingFactor
+        leftCorrelation, rightCorrelation, leftWidth, rightWidth = Template.fit(y)
+        
+        # Penalise a side if it has a low magnitude difference from min->max
+        centre = len(y) // 2
+        leftY = y[:centre]
+        leftScalingFactor = Critic.penalty(leftY)
+        
+        rightY = y[centre:]
+        rightScalingFactor = Critic.penalty(rightY, left=False)
         
         # Return the optimal score
-        return score, width
+        score = ((leftCorrelation * leftScalingFactor) + (rightCorrelation * rightScalingFactor)) / 2
+        
+        return score, leftWidth, rightWidth
     
     @staticmethod
     def scores_to_strength(scores):
@@ -423,23 +470,27 @@ class Critic:
                 
                 # Assess each replication of this parameter combination
                 scores = []
-                widths = []
+                leftWidths = []
+                rightWidths = []
                 for popSizeArray in qtlED:
                     for replicateArray in popSizeArray:
-                        score, width = Critic.score(replicateArray)
+                        score, leftWidth, rightWidth = Critic.score(replicateArray)
                         scores.append(score)
-                        widths.append(width)
+                        leftWidths.append(leftWidth)
+                        rightWidths.append(rightWidth)
                 
                 # Reshape scores into an array that matches the QTL shape
                 scores = np.stack(np.split(np.array(scores), numPopSizes)) # shape = (popsize, bootstraps)
-                widths = np.stack(np.split(np.array(widths), numPopSizes))
+                leftWidths = np.stack(np.split(np.array(leftWidths), numPopSizes))
+                rightWidths = np.stack(np.split(np.array(rightWidths), numPopSizes))
                 
                 # Also summarise scores as the signal strength
                 strengths = Critic.scores_to_strength(scores)
                 
                 # Store results in Spreadsheet
                 setattr(spreadsheet, f"scores{i+1}", scores)
-                setattr(spreadsheet, f"widths{i+1}", scores)
+                setattr(spreadsheet, f"leftWidths{i+1}", leftWidths)
+                setattr(spreadsheet, f"rightWidths{i+1}", rightWidths)
                 setattr(spreadsheet, f"strengths{i+1}", strengths)
             
             # Store the results into the Spreadsheet

@@ -69,7 +69,7 @@ class Spreadsheet:
         if os.path.isfile(self.fileName):
             with np.load(self.fileName, allow_pickle=True) as data:
                 # Load unfixed variables
-                EXPECTED_UNFIXED = ["scores", "widths", "strengths"]
+                EXPECTED_UNFIXED = ["scores", "leftWidths", "rightWidths", "strengths"]
                 for key in data.files:
                     if any([ key.startswith(prefix) for prefix in EXPECTED_UNFIXED ]):
                         setattr(self, key, data[key])
