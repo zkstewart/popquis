@@ -558,6 +558,41 @@ class TestBreeder(unittest.TestCase):
         # Clean up
         cleanup()
     
+    def test_qtlRanges(self):
+        # Arrange
+        cleanup()
+        os.makedirs(tmpDir, exist_ok=True)
+        locations = Locations(tmpDir)
+        
+        chroms = ["chr1", "chr2"]
+        cmMbp = 3.0
+        genotype1 = [Genotype("0/0"), Genotype("0/1"), Genotype("0/1")] # parent1, parent2, offspring
+        positions = [0]
+        edgeBp = 50
+        positions = [ (chrom, x) for x in positions for chrom in chroms ]
+        combinationEvaluator = Combination("1 AND 2")
+        
+        # Act
+        breeder = Breeder()
+        breeder.establish(positions, [genotype1, genotype1], cmMbp,
+                          snpMbp=int(1e6), edgeBp=edgeBp)
+        
+        # Assert
+        expectedLength = sum([
+            (edgeBp*2) + pos[-1] + 1
+            for pos in positions # two chroms so have to do edgeBp and such for each
+        ])
+        
+        self.assertEqual(len(breeder.genomeMap.df), expectedLength)
+        
+        markerRow = breeder.genomeMap.markers
+        self.assertEqual(len(markerRow), 2) # should be two marker rows
+        
+        self.assertEqual(breeder.qtlRanges, [(0, 100), (101, 201)])
+        
+        # Clean up
+        cleanup()
+    
     def test_when_invalid(self):
         # Arrange
         cleanup()
@@ -769,16 +804,37 @@ class TestCoordinator(unittest.TestCase):
         threads = 1
         bootstraps = 10
         
-        expectedShape = (len(chosenPopsize), bootstraps, len(breeder.genomeMap.df)) # (popsize, bootstraps, numVariants)
-        
         # Act
         coordinator = Coordinator(locations)
-        coordinator.run(configuration, threads, bootstraps=bootstraps)
+        coordinator.run(configuration, breeder.qtlRanges, threads, bootstraps=bootstraps)
         chosenSpreadsheet = Spreadsheet(locations.storageDir, chosenBalance, chosenError, chosenPopsize)
         chosenSpreadsheet.load()
         
         # Assert
-        self.assertEqual(chosenSpreadsheet.shape, expectedShape)
+        self.assertTrue(hasattr(chosenSpreadsheet, "ed1"))
+        self.assertTrue(hasattr(chosenSpreadsheet, "ed2"))
+        self.assertTrue(hasattr(chosenSpreadsheet, "ed3"))
+        
+        expectedShape1 = (
+            len(chosenPopsize),
+            bootstraps,
+            edgeBp + (positions[0][1]) + (((positions[1][1]+positions[0][1])/2) - positions[0][1]) + 1
+        )
+        self.assertEqual(chosenSpreadsheet.ed1.shape, expectedShape1)
+        
+        expectedShape2 = (
+            len(chosenPopsize),
+            bootstraps,
+            ((positions[2][1]+positions[1][1])/2) - ((positions[1][1]+positions[0][1])/2) + 1
+        )
+        self.assertEqual(chosenSpreadsheet.ed2.shape, expectedShape2)
+        
+        expectedShape3 = (
+            len(chosenPopsize),
+            bootstraps,
+            edgeBp + positions[2][1] - ((positions[2][1]+positions[1][1])/2) + 1
+        )
+        self.assertEqual(chosenSpreadsheet.ed3.shape, expectedShape3)
         
         # Clean up
         os.unlink(locations.group1Npy)
@@ -998,6 +1054,13 @@ class TestCritic(unittest.TestCase):
         positions2 = [0, 50]
         positions2 = [ ("chr1", x) for x in positions2 ]
         
+        expectedQtlRanges1 = [(0, 100)] # region is 100bp long, and 0-based
+        expectedQtlRanges2 = [(0, 75), (75, 150)] # region is 150bp long, and 0-based
+        
+        # Act
+        # critic1 = Critic(locations)
+        # critic2 = Critic(locations)
+        
         breeder1 = Breeder()
         breeder1.establish(positions1, genotypes1, cmMbp,
                           snpMbp=int(1e6), edgeBp=edgeBp)
@@ -1006,16 +1069,9 @@ class TestCritic(unittest.TestCase):
         breeder2.establish(positions2, genotypes2, cmMbp,
                           snpMbp=int(1e6), edgeBp=edgeBp)
         
-        expectedQtlRanges1 = [(0, 100)] # region is 100bp long, and 0-based
-        expectedQtlRanges2 = [(0, 75), (75, 150)] # region is 150bp long, and 0-based
-        
-        # Act
-        critic1 = Critic(locations, breeder1)
-        critic2 = Critic(locations, breeder2)
-        
         # Assert
-        self.assertEqual(critic1.qtlRanges, expectedQtlRanges1)
-        self.assertEqual(critic2.qtlRanges, expectedQtlRanges2)
+        self.assertEqual(breeder1.qtlRanges, expectedQtlRanges1)
+        self.assertEqual(breeder2.qtlRanges, expectedQtlRanges2)
     
     def test_score(self):
         "See TestTemplate.test_when_valid for the comparison being made in this test"
@@ -1099,9 +1155,10 @@ class TestCritic(unittest.TestCase):
         resultsArray = np.stack(np.split(resultsArray, numSizes)) # shape = (numSizes, bootstraps, numVariants)
         
         # Act to emulate the Critic process
-        critic = Critic(locations, breeder)
+        critic = Critic(locations)
         
-        startIndex, endIndex = critic.qtlRanges[0]
+        #startIndex, endIndex = critic.qtlRanges[0]
+        startIndex, endIndex = breeder.qtlRanges[0]
         qtlED = resultsArray[:,:,startIndex:endIndex+1]
         numPopSizes, numBootstraps, numVariants = qtlED.shape
         

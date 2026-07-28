@@ -222,6 +222,9 @@ class Coordinator:
         ongoingSeed = 0
         with ProcessPoolExecutor(max_workers=threads) as executor:
             for (popBalance, phenotypeError), popSizes in configuration:
+                if popSizes is None or len(popSizes) == 0:
+                    continue
+                
                 # Obtain the Spreadsheet this configuration will have results stored within
                 spreadsheet = Spreadsheet(self.storageDir, popBalance, phenotypeError, popSizes)
                 spreadsheet.load() # runs some internal validations of popBalance, phenotypeError, and popSizes
@@ -256,9 +259,7 @@ class Coordinator:
                     resultsArray = np.stack([ x.result() for x in futures ]) # shape = (popSize*bootstraps, numVariants)
                     resultsArray = np.stack(np.split(resultsArray, len(popSizes))) # shape = (popsize, bootstraps, numVariants)
                 else:
-                    if len(popSizes) != 0:
-                        raise Exception("Coordinator failed as futures list is empty but popSizes is not empty")
-                    resultsArray = None
+                    raise Exception("Coordinator failed as futures list is empty; cause is unknown")
                 
                 # Store results in Spreadsheet
                 for i, (startIndex, endIndex) in enumerate(qtlRanges):
