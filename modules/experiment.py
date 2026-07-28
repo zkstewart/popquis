@@ -202,10 +202,12 @@ class Coordinator:
         # Calculate Euclidean distance for each genotype and return
         return Calculator.euclidean_distance(g1Array, g2Array, power)
     
-    def run(self, configuration, threads, bootstraps=1000, power=4):
+    def run(self, configuration, qtlRanges, threads, bootstraps=1000, power=4):
         '''
         Parameters:
             configuration -- a Configuration class object
+            qtlRanges -- a list of tuples giving (start, end) indices for each QTL, as
+                         derived from the Breeder object
             threads -- an integer giving the number of parallel processes to run where possible
             bootstraps -- an integer giving the number of bootstrap replicates to run
             power -- the power value to raise the Euclidean distance to; default and recommended is 4
@@ -222,15 +224,15 @@ class Coordinator:
             for (popBalance, phenotypeError), popSizes in configuration:
                 # Obtain the Spreadsheet this configuration will have results stored within
                 spreadsheet = Spreadsheet(self.storageDir, popBalance, phenotypeError, popSizes)
+                spreadsheet.load() # runs some internal validations of popBalance, phenotypeError, and popSizes
                 
                 # See if this configuration has been completely processed
-                spreadsheet.load() # runs some internal validations of popBalance, phenotypeError, and popSizes
-                if spreadsheet.ed is not None:
-                    expectedShape = (len(popSizes), bootstraps, numVariants)
-                    if spreadsheet.shape == expectedShape:
+                if hasattr(spreadsheet, "ed1"): # .ed1 is set if we have run this at least partially
+                    expectedAttr = [ f"ed{i+1}" for i in range(len(qtlRanges)) ]
+                    if expectedAttr == spreadsheet.get_unfixed_attributes("ed"):
                         continue
                 
-                # Bootstrap replication of this parameter combination
+                # Bootstrap replication of each QTL for this parameter combination
                 futures = []
                 for totalPopSize in popSizes:
                     for replication in range(bootstraps):
@@ -259,7 +261,9 @@ class Coordinator:
                     resultsArray = None
                 
                 # Store results in Spreadsheet
-                spreadsheet.ed = resultsArray
+                for i, (startIndex, endIndex) in enumerate(qtlRanges):
+                    qtlArray = resultsArray[:,:,startIndex:endIndex+1] # +1 for end inclusive range
+                    setattr(spreadsheet, f"ed{i+1}", qtlArray)
                 spreadsheet.save()
     
     def __repr__(self):
@@ -272,8 +276,6 @@ class Critic:
     '''
     Args:
         locations -- a Locations object with a .storageDir attribute for use by this Critic object
-        breeder -- a Breeder object for use solely when initialising this object; breeder is
-                   NOT stored as an attribute of this object.
     Attributes:
         storageDir -- a string as from Locations.storageDir wherein Spreadsheet .npz files
                       can be found
@@ -292,9 +294,8 @@ class Critic:
     MID_SCORE = 0.50
     STRONG_SCORE = 0.75
     
-    def __init__(self, locations, breeder):
+    def __init__(self, locations):
         self.storageDir = locations.storageDir
-        self._define_qtl_ranges(breeder)
         self.isCritic = True # object type validator
     
     @staticmethod
@@ -412,38 +413,6 @@ class Critic:
             strengths.append([noSignal, weakSignal, moderateSignal, strongSignal])
         return np.array(strengths)
     
-    def _define_qtl_ranges(self, breeder):
-        '''
-        Parameters:
-            breeder -- a Breeder object storing a GenomeMap under its .genomeMap attribute
-        '''
-        # Establish the qtlRanges attribute
-        self.qtlRanges = []
-        for chromID in breeder.genomeMap.chromIDs:
-            # Subset the genomeMap's underlying DataFrame for relevant values
-            chromDF = breeder.genomeMap[chromID].df
-            chromMarkers = chromDF[chromDF["Marker"]]
-            
-            # Iterate through this chromosome to define the range of each QTL
-            lastEnd = None
-            rows = list(chromMarkers.itertuples())
-            for i, row in enumerate(rows):
-                # Get the start point of this QTL region
-                if i == 0:
-                    startIndex = chromDF.iloc[0].name
-                else:
-                    startIndex = lastEnd
-                
-                # Get the end point of this QTL
-                if (i+1) == len(rows):
-                    endIndex = chromDF.iloc[-1].name
-                else:
-                    endIndex = int((row.Index + rows[i+1].Index) / 2)
-                
-                # Store and iterate
-                self.qtlRanges.append((startIndex, endIndex))
-                lastEnd = endIndex
-    
     def run(self, configuration):
         '''
         Parameters:
@@ -459,16 +428,13 @@ class Critic:
             
             # See if this configuration has been completely processed
             if hasattr(spreadsheet, "scores1"): # .scores1 is set if we have run this at least partially
-                expectedAttr = [ f"scores{i+1}" for i in range(len(self.qtlRanges)) ]
-                if all([ hasattr(spreadsheet, x) for x in expectedAttr ]):
-                    "This check is technically passable with faulty data, but you'd really have to be TRYING to kill popquis..."
+                expectedAttr = [ f"scores{x[2:]}" for x in spreadsheet.get_unfixed_attributes("ed") ]
+                assert len(expectedAttr) > 0, "sanity check, if we get here .ed* should be set"
+                if expectedAttr == spreadsheet.get_unfixed_attributes("scores"):
                     continue
             
             # If not, iterate through each QTL to generate its results
-            for i, (startIndex, endIndex) in enumerate(self.qtlRanges):
-                # Slice the Spreadsheet ED array to get the statistics for this range
-                assert spreadsheet.ed is not None, "sanity check; if we are running Critic, .ed must be set already"
-                qtlED = spreadsheet.ed[:,:,startIndex:endIndex+1] # +1 for end inclusive range
+            for i, qtlED in enumerate(spreadsheet.get_ed()):
                 numPopSizes, numBootstraps, numVariants = qtlED.shape
                 
                 # Assess each replication of this parameter combination

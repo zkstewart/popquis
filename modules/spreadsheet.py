@@ -21,19 +21,29 @@ class Spreadsheet:
         popSizes -- an iterable containing integers giving population size increments
     Attributes:
         fileName -- a string indicating the location of the .npz storing the data of this Spreadsheet
-        ed -- None, or after using self.load(), it may instead be a numpy array with shape:
-              (len(popSizes), bootstraps, variants)
+        ed1/2/... -- non-existing attribute OR there may instead be one or more numpy arrays
+                     with shape: (len(popSizes), bootstraps, variants)
+        scores1/2/... -- non-existing attribute OR there may instead be one or more numpy arrays
+                         paired to the corresponding self.ed* attribute; score
+                         comes from Template fitting
+        leftWidths1/2/... -- non-existing attribute OR there may instead be one or more numpy arrays
+                             paired to the corresponding self.scores* attribute;
+                             leftWidth also comes from Template fitting
+        rightWidths1/2/... -- as per leftWidths but for the right side of a Template fit
+        strengths1/2/... -- non-existing attribute OR there may instead be one or more numpty arrays
+                            paired to the corresponding self.scores* attribute; strength
+                            comes from Critic.scores_to_strength
     Methods:
         save -- save the data in self to self.fileName
         load -- loads data out of the self.fileName file into self.array and also cross-checks the
                 existing popBalance and phenotypeError and popSizes values for compatibility
+        get_* -- yields the attribute value associated with each QTL
     '''
     def __init__(self, storageDir, popBalance, phenotypeError, popSizes):
         self.storageDir = storageDir
         self.popBalance = popBalance
         self.phenotypeError = phenotypeError
         self.popSizes = popSizes
-        self.ed = None
         self.isSpreadsheet = True # object type validator
     
     @property
@@ -56,11 +66,30 @@ class Spreadsheet:
     def fileName(self):
         return os.path.join(self.storageDir, f"{self.popBalance}_{self.phenotypeError}.npz")
     
-    @property
-    def shape(self):
-        if self.ed is None:
-            return None
-        return self.ed.shape
+    def get_unfixed_attributes(self, key):
+        attributes = [ x for x in self.__dict__.keys() if x.startswith(key) ]
+        attributes.sort(key = lambda x: int(x[len(key):]))
+        return attributes
+    
+    def get_ed(self):
+        for value in self.get_unfixed_attributes("ed"):
+            yield getattr(self, value) 
+    
+    def get_scores(self):
+        for value in self.get_unfixed_attributes("scores"):
+            yield getattr(self, value) 
+    
+    def get_leftWidths(self):
+        for value in self.get_unfixed_attributes("leftWidths"):
+            yield getattr(self, value) 
+    
+    def get_rightWidths(self):
+        for value in self.get_unfixed_attributes("rightWidths"):
+            yield getattr(self, value) 
+    
+    def get_strengths(self):
+        for value in self.get_unfixed_attributes("strengths"):
+            yield getattr(self, value) 
     
     def save(self):
         np.savez(self.fileName, **{key:value for key, value in self.__dict__.items() if not key.startswith("_")})
@@ -69,17 +98,12 @@ class Spreadsheet:
         if os.path.isfile(self.fileName):
             with np.load(self.fileName, allow_pickle=True) as data:
                 # Load unfixed variables
-                EXPECTED_UNFIXED = ["scores", "leftWidths", "rightWidths", "strengths"]
+                EXPECTED_UNFIXED = ["ed", "scores", "leftWidths", "rightWidths", "strengths"]
                 for key in data.files:
                     if any([ key.startswith(prefix) for prefix in EXPECTED_UNFIXED ]):
                         setattr(self, key, data[key])
                 
                 # Load static expected variables
-                _ed = data["ed"]
-                if _ed.ndim == 0 or len(_ed) == 0:
-                    _ed = None
-                self.ed = _ed
-                
                 _popBalance = float(data["popBalance"])
                 if _popBalance != self.popBalance:
                     raise ValueError(f"Spreadsheet file at '{self.fileName}' should have " + 
@@ -96,10 +120,11 @@ class Spreadsheet:
                                      f"popSizes=={self.popSizes} but instead is =={_popSizes}")
     
     def __repr__(self):
-        return "<Spreadsheet object;storageDir='{0}';popBalance={1};phenotypeError={2};hasED={3};hasScores={4}>".format(
+        return "<Spreadsheet object;storageDir='{0}';popBalance={1};phenotypeError={2};hasED={3};hasScores={4};hasStrengths{5}>".format(
             self.storageDir,
             self.popBalance,
             self.phenotypeError,
-            self.ed is not None,
-            hasattr(self, "scores1")
+            hasattr(self, "ed1"),
+            hasattr(self, "scores1"),
+            hasattr(self, "strengths1")
         )

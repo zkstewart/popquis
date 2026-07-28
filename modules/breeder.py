@@ -101,6 +101,8 @@ class Breeder:
         for genotype, rowTuple in zip(offspringGenotypes, self.genomeMap.markers.itertuples()):
             self.markerIndices.append(rowTuple.Index)
             self.markerAlleles.append(genotype.alleles)
+        
+        self._define_qtl_ranges()
     
     def produce_progeny(self, locations, combinationEvaluator, batchSize=1000, minimumGroupSize=10000, seed=1234):
         '''
@@ -163,6 +165,41 @@ class Breeder:
             # Re-load data to enable checking of group size
             group1.load()
             group2.load()
+    
+    def _define_qtl_ranges(self):
+        '''
+        Interprets the GenomeMap to derive the inclusive start and stop bounds for
+        each QTL region. Integration with the rest of this Breeder class is sloppy
+        as this function is being relocated from elsewhere as it makes more sense
+        here. Despite the jank it is self contained enough that the main ugliness
+        is in self.establish().
+        '''
+        # Establish the qtlRanges attribute
+        self.qtlRanges = []
+        for chromID in self.genomeMap.chromIDs:
+            # Subset the genomeMap's underlying DataFrame for relevant values
+            chromDF = self.genomeMap.df[self.genomeMap.df["CHR.PHYS"] == chromID]
+            chromMarkers = chromDF[chromDF["Marker"]]
+            
+            # Iterate through this chromosome to define the range of each QTL
+            lastEnd = None
+            rows = list(chromMarkers.itertuples())
+            for i, row in enumerate(rows):
+                # Get the start point of this QTL region
+                if i == 0:
+                    startIndex = chromDF.iloc[0].name
+                else:
+                    startIndex = lastEnd
+                
+                # Get the end point of this QTL
+                if (i+1) == len(rows):
+                    endIndex = chromDF.iloc[-1].name
+                else:
+                    endIndex = int((row.Index + rows[i+1].Index) / 2)
+                
+                # Store and iterate
+                self.qtlRanges.append((startIndex, endIndex))
+                lastEnd = endIndex
     
     def __repr__(self):
         return "<Breeder object;genomeMap={0};parent1={1};parent2={2}>".format(

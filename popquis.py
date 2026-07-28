@@ -56,7 +56,7 @@ def main():
                    using operators: QTL number [e.g., 1, 2, ...], parentheses, AND, OR.
                    If you provided only one QTL to -q, you should just specify '1' here.""")
     p.add_argument("-l", dest="linkage",
-                   required=True,
+                   required=False,
                    nargs="*",
                    choices=["none", "weak", "moderate", "strong"],
                    help="""If you are modelling multiple QTLs, specify the linkage strength
@@ -131,10 +131,10 @@ def main():
     
     # Compute the ED segregation statistics of each simulated variable combination
     coordinator = Coordinator(args.locations)
-    coordinator.run(configuration, args.threads, bootstraps=args.bootstraps)
+    coordinator.run(configuration, breeder.qtlRanges, args.threads, bootstraps=args.bootstraps)
     
     # Score each simulated variable combination
-    critic = Critic(args.locations, breeder)
+    critic = Critic(args.locations)
     critic.run(configuration)
     
     # Produce an output tabular report of the simulation outcomes
