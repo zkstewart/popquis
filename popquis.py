@@ -13,7 +13,7 @@ from modules.breeder import Breeder
 from modules.experiment import Configuration, Coordinator, Critic
 from modules.locations import Locations
 from modules.parsing import parse_qtl_encoding
-from modules.reporting import write_report_tsv
+from modules.reporting import write_report_tsv, plot_replicate_exemplars
 from modules.validation import validate_args, validate_breeding_population
 
 def main():
@@ -139,10 +139,14 @@ def main():
     
     # Produce an output tabular report of the simulation outcomes
     if not (os.path.isfile(args.locations.outputTSV) and os.path.isfile(args.locations.outputTSV + Locations.OKAY_SUFFIX)):
-        write_report_tsv(args.locations, configuration, len(args.qtls))
+        write_report_tsv(args.locations, configuration)
         Locations.touch(args.locations.outputTSV)
     else:
         print(f"# Output report table '{args.locations.outputTSV}' already exists; skipping ...")
+    
+    # Produce exemplar plots for QC purposes
+    "This allows visual assessment of simulated ED statistics against their scores"
+    plot_replicate_exemplars(locations, configuration)
     
     # Produce the final stacked barplot visualisation
     ## TBD
