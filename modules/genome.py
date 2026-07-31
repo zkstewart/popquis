@@ -54,7 +54,7 @@ class Genome:
                 if _array is None:
                     _array = chromosome.array.copy()
                 else:
-                    _array = np.hstack((_array, chromosome.array))
+                    _array = np.vstack((_array, chromosome.array.copy()))
             self._array = _array
             self._wasUpdated = False
         return self._array
@@ -76,7 +76,7 @@ class Genome:
     
     def __getitem__(self, key):
         if key not in self.chromosomes:
-            return KeyError(f"'{key}' not in this Genome")
+            raise KeyError(f"'{key}' not in this Genome")
         return self.chromosomes[key]
     
     def __iter__(self):

@@ -176,20 +176,20 @@ class Breeder:
         '''
         # Establish the qtlRanges attribute
         self.qtlRanges = []
+        lastEnd = None
         for chromID in self.genomeMap.chromIDs:
             # Subset the genomeMap's underlying DataFrame for relevant values
             chromDF = self.genomeMap.df[self.genomeMap.df["CHR.PHYS"] == chromID]
             chromMarkers = chromDF[chromDF["Marker"]]
             
             # Iterate through this chromosome to define the range of each QTL
-            lastEnd = None
             rows = list(chromMarkers.itertuples())
             for i, row in enumerate(rows):
                 # Get the start point of this QTL region
                 if i == 0:
                     startIndex = chromDF.iloc[0].name
                 else:
-                    startIndex = lastEnd
+                    startIndex = lastEnd + 1 # prevent overlap with preceding QTL
                 
                 # Get the end point of this QTL
                 if (i+1) == len(rows):
