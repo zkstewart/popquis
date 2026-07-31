@@ -109,16 +109,15 @@ class MeiosisSimulator(BaseSimulator):
         mLength = cmLength / 100.0
         
         crossovers = []
-        mPos = 0.0
-        while True:
+        mPos = -mLength # start before the chromosome to prevent edge bias
+        while mPos < mLength: # if mPos == mLength, any interval will exceed mLength and be useless
             interval = self.rng.gamma(
                 shape=self.nu,
                 scale=1.0 / self.nu
             )
             mPos += interval
-            if mPos > mLength: # if this position would exceed the actual length of the chromosome
-                break
-            crossovers.append(mPos * 100.0) # convert back to centimorgans
+            if 0 <= mPos <= mLength: # crossover can occur at the very start and end safely
+                crossovers.append(mPos * 100.0) # convert back to centimorgans
         
         return np.asarray(crossovers)
     
