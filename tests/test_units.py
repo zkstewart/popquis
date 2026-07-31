@@ -29,7 +29,6 @@ from modules.statistics import RandomNumberGenerator, Calculator
 from modules.template import Template
 
 # Specify data locations
-__file__ = "/mnt/c/git/popquis/tests/test_units.py"
 testDir = os.path.dirname(os.path.abspath(__file__))
 tmpDir = os.path.join(testDir, "tmp")
 
@@ -364,11 +363,11 @@ class TestGenome(unittest.TestCase):
         genome[chromID2] = chromosome2
         
         # Assert
-        self.assertEqual(chromosome1.array.shape[1] + chromosome2.array.shape[1], genome.array.shape[1])
+        self.assertEqual(chromosome1.array.shape[0] + chromosome2.array.shape[0], genome.array.shape[0])
         ongoingCount = 0
         for chromosome in (chromosome1, chromosome2):
-            for gt in chromosome.array[0]:
-                genomeGt = genome.array[0][ongoingCount]
+            for gt in chromosome.array:
+                genomeGt = genome.array[ongoingCount]
                 self.assertTrue(np.array_equal(gt, genomeGt))
                 ongoingCount += 1
     
@@ -825,14 +824,14 @@ class TestCoordinator(unittest.TestCase):
         expectedShape2 = (
             len(chosenPopsize),
             bootstraps,
-            ((positions[2][1]+positions[1][1])/2) - ((positions[1][1]+positions[0][1])/2) + 1
+            ((positions[2][1]+positions[1][1])/2) - ((positions[1][1]+positions[0][1])/2)
         )
         self.assertEqual(chosenSpreadsheet.ed2.shape, expectedShape2)
         
         expectedShape3 = (
             len(chosenPopsize),
             bootstraps,
-            edgeBp + positions[2][1] - ((positions[2][1]+positions[1][1])/2) + 1
+            edgeBp + positions[2][1] - ((positions[2][1]+positions[1][1])/2)
         )
         self.assertEqual(chosenSpreadsheet.ed3.shape, expectedShape3)
         
@@ -1055,7 +1054,7 @@ class TestCritic(unittest.TestCase):
         positions2 = [ ("chr1", x) for x in positions2 ]
         
         expectedQtlRanges1 = [(0, 100)] # region is 100bp long, and 0-based
-        expectedQtlRanges2 = [(0, 75), (75, 150)] # region is 150bp long, and 0-based
+        expectedQtlRanges2 = [(0, 75), (76, 150)] # region is 150bp long, and 0-based
         
         # Act
         # critic1 = Critic(locations)
