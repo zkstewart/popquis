@@ -120,7 +120,7 @@ def meiosis_skew(seed, numReps=100000):
         
         proportionCounts = (counts / np.sum(counts))
         minmaxCounts = (counts - counts.min()) / (counts.max() - counts.min())
-        formatted = [ str(round(x, 4)*100) + "%" for x in proportionCounts ]
+        formatted = [ str(round(x*100, 4)) + "%" for x in proportionCounts ]
         
         print("# meiosis_skew(): forming a histogram with 10 bins for " +
               "the crossover points shows a distribution of where each bin " +
