@@ -64,7 +64,7 @@ class Template:
         )[0, 1]
     
     @staticmethod
-    def fit(y, minimum=0.01, maximum=0.5):
+    def fit_gauss(y, minimum=0.01, maximum=0.5):
         '''
         Fit a numpy array of numeric values against a QTL-like peak as modelled through
         an optimised Guassian function. This function is optimised for a FWHM proportion
@@ -87,13 +87,13 @@ class Template:
             width -- a float of the FWHM between minimum -> maximum that provided optimised
                      fitting
         '''
-        def _objective(peakFraction, isLeft):
+        def _objective(peakFraction, left):
             template = Template.split_gaussian_template(
                 len(y),
                 peakFraction,
-                left=isLeft
+                left=left
             )
-            if isLeft:
+            if left:
                 return -Template._correlate(y[:len(y)//2], template)
             else:
                 return -Template._correlate(y[len(y)//2:], template)
@@ -108,13 +108,13 @@ class Template:
         leftResult = minimize_scalar(
             _objective,
             bounds=(minimum, maximum),
-            args=(True), # isLeft is True
+            args=(True), # left is True
             method="bounded"
         )
         rightResult = minimize_scalar(
             _objective,
             bounds=(minimum, maximum),
-            args=(False), # isLeft is False; this isRight
+            args=(False), # left is False; look at right side instead
             method="bounded"
         )
         
@@ -125,3 +125,48 @@ class Template:
         rightWidth = rightResult.x
         
         return leftCorrelation, rightCorrelation, leftWidth, rightWidth
+    
+    @staticmethod
+    def _template_regression(y, template):
+        '''
+        Calculates R-squared for line fitting against a Template.
+        '''
+        residuals = y - template
+        ss_res = np.sum(residuals**2) # residual sum of squares
+        ss_tot = np.sum((y - np.mean(y))**2) # total sum of squares
+        r_squared = 1 - (ss_res / ss_tot)
+        return r_squared
+    
+    @staticmethod
+    def split_diagonal_template(y, left=True):
+        centre = len(y) // 2
+        if left:
+            y = y[:centre]
+            return np.linspace(np.max(y), np.min(y), num=len(y)) # '\' slope, opposite of the desired '/'
+        else:
+            y = y[centre:]
+            return np.linspace(np.min(y), np.max(y), num=len(y))
+    
+    @staticmethod
+    def fit_inverse_diagonal(y):
+        '''
+        Fits a numpy array of numeric values against a diagonal line from the
+        local minimum to the local maximum of the left and right of a putative
+        QTL curve. Each half is compared to a Template showing the exact opposite
+        trend to what is desired, with positive correlations suggesting a trend
+        that would actively mislead a QTL study with respect to the location of
+        the causal allele.
+        
+        Parameters:
+            y -- a numpy array of numeric values to have fitted against the
+                 inversed diagonal line
+        Returns:
+            correlation -- a float of the Pearson correlation
+        '''
+        leftTemplate = Template.split_diagonal_template(y, left=True)
+        rightTemplate = Template.split_diagonal_template(y, left=False)
+        
+        leftRegression = Template._template_regression(y[:len(y)//2], leftTemplate)
+        rightRegression = Template._template_regression(y[len(y)//2:], rightTemplate)
+        
+        return leftRegression, rightRegression

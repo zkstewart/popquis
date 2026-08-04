@@ -300,7 +300,7 @@ class Critic:
         self.isCritic = True # object type validator
     
     @staticmethod
-    def penalty(y, left=True):
+    def penalty(y, globalMax, left=True):
         '''
         Provides a scaling factor / correction / penalty to data distributions
         that do not provide a meaningfully visible distinction between the minimum
@@ -321,23 +321,29 @@ class Critic:
         Gaussian template fitting is performed assymetrically, so we must differentiate
         between the left and right sides. For the left side of a Template, the left
         edge is the outside of the QTL and the right side is the centre of the QTL.
+        
+        Parameters:
+            y -- a numpy array for the left or right side of a data distribution
+            globalMax -- the maximum value for the entire data distribution, not limited
+                         to left or right side alone
+            left -- a boolean indicating whether this data distribution is the left side
+                    (True) of a QTL or the right (False)
         '''
         minY = np.min(y)
         if minY == 0:
             return 1.0 # any increase over zero is significant
-        maxY = np.max(y)
         medianY = np.median(y)
+        localMax = np.max(y)
         
         if left:
             troughFactor = minY / y[0] # is the left edge a trough
-            peakFactor = y[-1] / maxY # is the right edge a peak
+            peakFactor = y[-1] / globalMax # is the right edge a global peak
         else:
             troughFactor = minY / y[-1] # is the right edge a trough
-            peakFactor = y[0] / maxY # is the left edge a peak
-        slopeFactor = (medianY / maxY) * (minY / medianY) 
+            peakFactor = y[0] / globalMax # is the left edge a global peak
         
-        if maxY != minY:
-            medianFraction = (medianY - minY) / (maxY - minY) # is the minimum closer to the median than the maximum
+        if localMax != minY:
+            medianFraction = (medianY - minY) / (localMax - minY) # is the minimum closer to the median than the maximum
             slopeFactor = np.clip(
                 2 * (1 - medianFraction), # if median is closer to minimum, 1-medianFraction becomes > 0.5
                 0, # this should never activate, clipping is solely to prevent a value > 1
@@ -346,7 +352,7 @@ class Critic:
         else:
             slopeFactor = 0 # a flat line has no slope
         
-        magnitudeFactor = min((maxY - minY) / (minY / 2), 1.0)
+        magnitudeFactor = min((localMax - minY) / (minY / 2), 1.0) # measure magnitude locally not globally
         
         return ( (troughFactor + peakFactor + slopeFactor) / 3 ) * magnitudeFactor
     
@@ -374,19 +380,31 @@ class Critic:
         if np.isclose(np.std(y), 0): # isclose to tolerate floating point inaccuracy
             return 0, None, None # a flat line should have 0 score; also speed up program and avoid divide by zero error later
         
-        # Fit a Template against this ED distribution
-        leftCorrelation, rightCorrelation, leftWidth, rightWidth = Template.fit(y)
+        # Fit a Guassian Template against this ED distribution
+        "This models an idealised QTL curve with a maximum peak and a variably-shaped slope to the edge minimum"
+        leftCorr, rightCorr, leftWidth, rightWidth = Template.fit_gauss(y)
+        
+        # Fit an inverse diagonal Template against this ED distribution
+        "This models an actively misleading QTL curve that points away from the true causal allele"
+        leftInverseCorr, rightInverseCorr = Template.fit_inverse_diagonal(y)
+        
+        if leftInverseCorr > 0: # if an inverse diagonal Template fits the data well
+            leftCorr = min(leftCorr, -leftInverseCorr)
+        if rightInverseCorr > 0:
+            rightCorr = min(rightCorr, -rightInverseCorr)
         
         # Penalise a side if it has a low magnitude difference from min->max
         centre = len(y) // 2
+        globalMax = np.max(y)
+        
         leftY = y[:centre]
-        leftScalingFactor = Critic.penalty(leftY)
+        leftScalingFactor = Critic.penalty(leftY, globalMax, left=True)
         
         rightY = y[centre:]
-        rightScalingFactor = Critic.penalty(rightY, left=False)
+        rightScalingFactor = Critic.penalty(rightY, globalMax, left=False)
         
         # Return the optimal score
-        score = ((leftCorrelation * leftScalingFactor) + (rightCorrelation * rightScalingFactor)) / 2
+        score = ((leftCorr * leftScalingFactor) + (rightCorr * rightScalingFactor)) / 2
         
         return score, leftWidth, rightWidth
     
