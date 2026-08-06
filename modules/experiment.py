@@ -300,7 +300,7 @@ class Critic:
         self.isCritic = True # object type validator
     
     @staticmethod
-    def penalty(y, globalMax, left=True):
+    def penalty(y, globalMin, globalMax, left=True):
         '''
         Provides a scaling factor / correction / penalty to data distributions
         that do not provide a meaningfully visible distinction between the minimum
@@ -329,21 +329,23 @@ class Critic:
             left -- a boolean indicating whether this data distribution is the left side
                     (True) of a QTL or the right (False)
         '''
-        minY = np.min(y)
-        if minY == 0:
+        NOTICEABLE_INCREASE = 1.2
+        
+        localMin = np.min(y)
+        if localMin == 0:
             return 1.0 # any increase over zero is significant
         medianY = np.median(y)
         localMax = np.max(y)
         
         if left:
-            troughFactor = minY / y[0] # is the left edge a trough
+            troughFactor = localMin / y[0] # is the left edge a trough
             peakFactor = y[-1] / globalMax # is the right edge a global peak
         else:
-            troughFactor = minY / y[-1] # is the right edge a trough
+            troughFactor = localMin / y[-1] # is the right edge a trough
             peakFactor = y[0] / globalMax # is the left edge a global peak
         
-        if localMax != minY:
-            medianFraction = (medianY - minY) / (localMax - minY) # is the minimum closer to the median than the maximum
+        if localMax != localMin:
+            medianFraction = (medianY - localMin) / (localMax - localMin) # is the minimum closer to the median than the maximum
             slopeFactor = np.clip(
                 2 * (1 - medianFraction), # if median is closer to minimum, 1-medianFraction becomes > 0.5
                 0, # this should never activate, clipping is solely to prevent a value > 1
@@ -352,7 +354,10 @@ class Critic:
         else:
             slopeFactor = 0 # a flat line has no slope
         
-        magnitudeFactor = min((localMax - minY) / (minY / 2), 1.0) # measure magnitude locally not globally
+        magnitudeFactor = max(
+            ((localMax - localMin) / (globalMax - globalMin)), # global comparison; handles small min-max differences
+            min(localMax / (localMin * NOTICEABLE_INCREASE), 1) # local comparison; handles larger differences
+        )
         
         return ( (troughFactor + peakFactor + slopeFactor) / 3 ) * magnitudeFactor
     
@@ -384,54 +389,36 @@ class Critic:
         "This models an idealised QTL curve with a maximum peak and a variably-shaped slope to the edge minimum"
         leftCorr, rightCorr, leftWidth, rightWidth = Template.fit_gauss(y)
         
-        # Run a simple diagonal correlation to check directionality
-        "If the slope isn't right, we discount the entire score"
-        leftDiagCorr, rightDiagCorr, leftSlope, rightSlope = Template.fit_diagonal(y)
+        # Score the focal point of each half of this ED distribition
+        "This scores the location of the local maxima scaled by the global maximum"
+        leftFocus, rightFocus = Template.fit_focus(y)
         
-        if leftSlope < 0: # a negative slope means the left side goes '\' which is bad
-            leftCorr = 0
-        if rightSlope > 0: # a positive slop means the right side goes '/' which is bad
-            rightCorr = 0
+        # Combine the correlation and focus measurements
+        leftScore = np.abs(leftCorr * leftFocus)
+        if leftCorr < 0 or leftFocus < 0:
+            leftScore = -leftScore
         
-        # Run regression of the optimised Guassian template against this ED distribution
-        "We use regression now to see if the data _actually_ fits well"
-        leftR2, rightR2 = Template.regress_gauss(y, leftWidth, rightWidth)
-        ## This is not doing what it needs to...
-        
-        if leftR2 < 0:
-            leftCorr = 0 # if the data does not follow the Guassian shape, neutralise the scoring
-        if rightR2 < 0:
-            rightCorr = 0
-        
-        # Fit an inverse diagonal Template against this ED distribution
-        "This models an actively misleading QTL curve that points away from the true causal allele"
-        leftInverseR2, rightInverseR2 = Template.fit_inverse_diagonal(y)
-        
-        if leftInverseR2 > 0: # if an inverse diagonal Template fits the data well
-            leftCorr = min(leftCorr, -leftInverseR2)
-        if rightInverseR2 > 0:
-            rightCorr = min(rightCorr, -rightInverseR2)
+        rightScore = np.abs(rightCorr * rightFocus)
+        if rightCorr < 0 or rightFocus < 0:
+            rightScore = -rightScore
         
         # Penalise a side if it has a low magnitude difference from min->max
         centre = len(y) // 2
+        globalMin = np.min(y)
         globalMax = np.max(y)
         
         leftY = y[:centre]
-        leftScalingFactor = Critic.penalty(leftY, globalMax, left=True)
+        leftScalingFactor = Critic.penalty(leftY, globalMin, globalMax, left=True)
         
         rightY = y[centre:]
-        rightScalingFactor = Critic.penalty(rightY, globalMax, left=False)
+        rightScalingFactor = Critic.penalty(rightY, globalMin, globalMax, left=False)
         
-        # Return the optimal score
-        if leftCorr > 0:
-            leftScore = leftCorr * leftScalingFactor
-        else:
-            leftScore = leftCorr # do not use the scaling factor
+        # Scale and return the scores
+        if leftScore > 0: # don't apply scaling to a value that's already negative
+            leftScore = leftScore * leftScalingFactor
         
-        if rightCorr > 0:
-            rightScore = rightCorr * rightScalingFactor
-        else:
-            rightScore = rightCorr
+        if rightScore > 0:
+            rightScore = rightScore * rightScalingFactor
         
         score = (leftScore + rightScore) / 2
         

@@ -37,22 +37,6 @@ class Template:
             return template[centre:]
     
     @staticmethod
-    def split_diagonal_template(y, inverted=False, left=True):
-        centre = len(y) // 2
-        if left:
-            y = y[:centre]
-            if not inverted:
-                return np.linspace(np.min(y), np.max(y), num=len(y)) # left side should slope up as '/'
-            else:
-                return np.linspace(np.max(y), np.min(y), num=len(y)) # '\' slope, opposite to desired
-        else:
-            y = y[centre:]
-            if not inverted:
-                return np.linspace(np.max(y), np.min(y), num=len(y)) # right side should slope down as '\'
-            else:
-                return np.linspace(np.min(y), np.max(y), num=len(y)) # '/' slope, opposite to desired
-    
-    @staticmethod
     def _correlation(y, template):
         '''
         Calculate the Pearson product-moment correlation coefficient between an array of
@@ -72,24 +56,6 @@ class Template:
             return 0
         
         return np.corrcoef(y, template)[0, 1]
-    
-    @staticmethod
-    def _regression(y, template):
-        '''
-        Calculates R-squared for line fitting against a Template. The result is a
-        value ranging from -inf to +1, where negative values indicate that the
-        Template fits worse than a simple line through the mean (which would
-        give a value of zero) with positive values indicating the Template
-        fits the data better than the simple mean line.
-        '''
-        residuals = y - template
-        ss_res = np.sum(residuals**2) # residual sum of squares
-        ss_tot = np.sum((y - np.mean(y))**2) # total sum of squares
-        if np.isclose(ss_tot, 0):
-            return 1.0
-        
-        r_squared = 1 - (ss_res / ss_tot)
-        return r_squared
     
     @staticmethod
     def fit_gauss(y, minimum=0.01, maximum=0.5):
@@ -155,92 +121,6 @@ class Template:
         return leftCorrelation, rightCorrelation, leftWidth, rightWidth
     
     @staticmethod
-    def _polyfit(y):
-        x = np.arange(len(y))
-        slope, intercept = np.polyfit(x, y, 1)
-        y_pred = slope * x + intercept
-        return slope, y_pred
-    
-    @staticmethod
-    def fit_diagonal(y):
-        leftY = y[:len(y)//2]
-        rightY = y[len(y)//2:]
-        
-        leftSlope, leftPred = Template._polyfit(leftY)
-        rightSlope, rightPred = Template._polyfit(rightY)
-        
-        leftCorrelation = Template._correlation(leftY, leftPred)
-        rightCorrelation = Template._correlation(rightY, rightPred)
-        
-        return leftCorrelation, rightCorrelation, leftSlope, rightSlope
-    
-    @staticmethod
-    def _flat_correlation(y):
-        x = np.repeat(np.median(y), len(y))
-        
-        return np.corrcoef(
-            y,
-            x
-        )[0, 1]
-    
-    @staticmethod
-    def fit_horizontal(y):
-        leftY = y[:len(y)//2]
-        rightY = y[len(y)//2:]
-        
-        leftFlat = np.repeat(np.median(leftY), len(leftY))
-        rightFlat = np.repeat(np.median(rightY), len(rightY))
-        
-        leftCorrelation = Template._correlation(leftY, leftFlat)
-        rightCorrelation = Template._correlation(rightY, rightFlat)
-        
-        return leftCorrelation, rightCorrelation, leftSlope, rightSlope
-    
-    @staticmethod
-    def regress_gauss(y, leftWidth, rightWidth):
-        leftTemplate = Template.split_gaussian_template(len(y), peakFraction=leftWidth, left=True)
-        rightTemplate = Template.split_gaussian_template(len(y), peakFraction=rightWidth, left=False)
-        
-        # Split the y data distribution into its halves
-        centre = len(y) // 2
-        leftY = y[:len(y)//2]
-        rightY = y[len(y)//2:]
-        
-        # Min-max normalise each half
-        leftY = (leftY - min(leftY)) / (max(leftY) - min(leftY))
-        rightY = (rightY - min(rightY)) / (max(rightY) - min(rightY))
-        
-        # Regress the data against its template
-        leftR2 = Template._regression(leftY, leftTemplate)
-        rightR2 = Template._regression(rightY, rightTemplate)
-        
-        return leftR2, rightR2
-    
-    @staticmethod
-    def fit_inverse_diagonal(y):
-        '''
-        Fits a numpy array of numeric values against a diagonal line from the
-        local minimum to the local maximum of the left and right of a putative
-        QTL curve. Each half is compared to a Template showing the exact opposite
-        trend to what is desired, with positive correlations suggesting a trend
-        that would actively mislead a QTL study with respect to the location of
-        the causal allele.
-        
-        Parameters:
-            y -- a numpy array of numeric values to have fitted against the
-                 inversed diagonal line
-        Returns:
-            correlation -- a float of the Pearson correlation
-        '''
-        leftTemplate = Template.split_diagonal_template(y, inverted=True, left=True)
-        rightTemplate = Template.split_diagonal_template(y, inverted=True, left=False)
-        
-        leftR2 = Template._regression(y[:len(y)//2], leftTemplate)
-        rightR2 = Template._regression(y[len(y)//2:], rightTemplate)
-        
-        return leftR2, rightR2
-    
-    @staticmethod
     def generate_focus_template(y, transitionControl=2):
         '''
         Generates a template with a weighting/scoring schema for
@@ -269,7 +149,7 @@ class Template:
     def _focusing(y, template):
         maxIndices = np.flatnonzero(y == y.max())
         focalPoints = template[maxIndices]
-        return sum(focalPoints) / len(focalPoints)
+        return np.sum(focalPoints) / len(focalPoints)
     
     @staticmethod
     def fit_focus(y):
@@ -302,4 +182,3 @@ class Template:
         
         return ((leftFocus * (np.max(leftY) / np.max(y))),  # scale the focus by its proportion
                (rightFocus * (np.max(rightY) / np.max(y)))) # of actually containing a global max
-    
