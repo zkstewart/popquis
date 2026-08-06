@@ -48,6 +48,10 @@ class Locations:
     def storageDir(self):
         return os.path.join(self.workingDirectory, "data_store")
     
+    @property
+    def qcPlotsDir(self):
+        return os.path.join(self.workingDirectory, "qc_plots")
+    
     # Naive file properties
     @property
     def group1Npy(self):
@@ -73,6 +77,7 @@ class Locations:
     def init_dirs(self, quiet=True):
         self.make_workdir(quiet=quiet)
         self.make_subdir("storageDir")
+        self.make_subdir("qcPlotsDir")
     
     def make_workdir(self, quiet=True):
         if os.path.isdir(self.workingDirectory):

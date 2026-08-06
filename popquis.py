@@ -146,7 +146,7 @@ def main():
     
     # Produce exemplar plots for QC purposes
     "This allows visual assessment of simulated ED statistics against their scores"
-    plot_replicate_exemplars(locations, configuration)
+    plot_replicate_exemplars(args.locations, configuration)
     
     # Produce the final stacked barplot visualisation
     ## TBD

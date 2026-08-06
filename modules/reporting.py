@@ -6,11 +6,14 @@
 import os
 import sys
 
+import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
 from PIL import Image
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from modules.experiment import Critic
 from modules.spreadsheet import Spreadsheet
 
 IMG_WIDTH = 525
@@ -89,7 +92,7 @@ def _popsize_label_segment(popSize):
     plotImg = Image.frombytes("RGBA", (w , h), buf.tobytes())
     return plotImg
 
-def plot_qtl_ed(y, score):
+def _qtl_ed_plot(y, score):
     '''
     Obtains a plot (as a Pillow Image object) for visualising the line fit to the ED^4 data.
     
@@ -134,8 +137,7 @@ def plot_replicate_exemplars(locations, configuration):
         
         # Iterate over each simulated QTL
         for i, (qtlED, qtlScores) in enumerate(zip(spreadsheet.get_ed(), spreadsheet.get_scores())):
-            plotFileName = os.path.join(locations.workingDirectory,
-                                        "plots",
+            plotFileName = os.path.join(locations.qcPlotsDir,
                                         f"{popBalance}_{phenotypeError}.qtl{i+1}.png")
             if os.path.isfile(plotFileName):
                 continue
@@ -143,7 +145,7 @@ def plot_replicate_exemplars(locations, configuration):
             # Format an Image for later output
             nrow = len(popSizes)
             ncol = 4 # one exemplar for strengths: none, weak, moderate, strong
-            image = Image.new("RGB", (LABEL_WIDTH + IMG_WIDTH*ncol, IMG_HEIGHT*ncol))
+            image = Image.new("RGB", (LABEL_WIDTH + IMG_WIDTH*ncol, IMG_HEIGHT*nrow))
             y_offset = -IMG_HEIGHT
             for popSizeED, popSizeScore, popSize in zip(qtlED, qtlScores, popSizes):
                 y_offset += IMG_HEIGHT
@@ -154,7 +156,7 @@ def plot_replicate_exemplars(locations, configuration):
                     thisStrength = Critic.scores_to_strength(np.array([[replicateScore]]))[0]
                     exemplarIndex = 0 if thisStrength[0] else 1 if thisStrength[1] else 2 if thisStrength[2] else 3
                     if exemplars[exemplarIndex] is None:
-                        exemplars[exemplarIndex] = plot_qtl_ed(replicateED, replicateScore)
+                        exemplars[exemplarIndex] = _qtl_ed_plot(replicateED, replicateScore)
                         remainingExemplars -= 1
                     if remainingExemplars == 0:
                         break
