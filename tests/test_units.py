@@ -1083,7 +1083,7 @@ class TestCritic(unittest.TestCase):
         ])
         
         # Act
-        leftCorr, rightCorr, leftWidth, rightWidth = Template.fit(y4) # near perfect
+        leftCorr, rightCorr, leftWidth, rightWidth = Template.fit_gauss(y4) # near perfect
         criticScore, leftWidth, rightWidth = Critic.score(y4) # np.float64(0.02000000000000001)
         
         # Assert
@@ -1176,47 +1176,96 @@ class TestCritic(unittest.TestCase):
         # Clean up
         cleanup()
 
+def _generate_template_y_arrays():
+    # A peak (^) shape
+    y1 = np.array([
+        *list(np.linspace(0, 4, 20)),
+        *list(np.linspace(4, 0, 20)),
+    ])
+    # A min-peak-min (_^_) shape
+    y2 = np.array([
+        *list(np.zeros(10)),
+        *list(np.linspace(0, 4, 10)),
+        *list(np.linspace(4, 0, 10)),
+        *list(np.zeros(10))
+    ])
+    # A medium-peak-min (-^_) shape
+    y3 = np.array([
+        *list(np.ones(10)),
+        *list(np.linspace(0, 4, 10)),
+        *list(np.linspace(4, 0, 10)),
+        *list(np.zeros(10))
+    ])
+    # A small peak (--'--) shape
+    y4 = np.array([
+        *list(np.ones(19)),
+        1.01,
+        1.01,
+        *list(np.ones(19))
+    ])
+    # A completely flat (--) shape
+    y5 = np.ones(40)
+    # A diagonal (\) shape
+    y6 = np.linspace(4, 0, 40)
+    
+    return y1, y2, y3, y4, y5, y6
+
 class TestTemplate(unittest.TestCase):
-    def test_when_valid(self):
+    def test_gauss(self):
         """This test used to make more sense before refactoring the Template
         to work asymmetrically. Now, it just proves that the asymmetry handling
         works as expected. The asymmetric distributions show a left and right
         score that is approximately equal to each other."""
         # Arrange
-        y1 = np.array([
-            *list(np.linspace(0, 4, 20)),
-            *list(np.linspace(4, 0, 20)),
-        ])
-        y2 = np.array([
-            *list(np.zeros(10)),
-            *list(np.linspace(0, 4, 10)),
-            *list(np.linspace(4, 0, 10)),
-            *list(np.zeros(10))
-        ])
-        y3 = np.array([
-            *list(np.ones(10)),
-            *list(np.linspace(0, 4, 10)),
-            *list(np.linspace(4, 0, 10)),
-            *list(np.zeros(10))
-        ])
-        y4 = np.array([
-            *list(np.ones(19)),
-            1.01,
-            1.01,
-            *list(np.ones(19))
-        ])
+        y1, y2, y3, y4, y5, y6 = _generate_template_y_arrays()
         
         # Act
-        leftCorr1, rightCorr1, leftWidth1, rightWidth1 = Template.fit(y1)
-        leftCorr2, rightCorr2, leftWidth2, rightWidth2 = Template.fit(y2)
-        leftCorr3, rightCorr3, leftWidth3, rightWidth3 = Template.fit(y3)
-        leftCorr4, rightCorr4, leftWidth4, rightWidth4 = Template.fit(y4)
+        leftCorr1, rightCorr1, leftWidth1, rightWidth1 = Template.fit_gauss(y1)
+        leftCorr2, rightCorr2, leftWidth2, rightWidth2 = Template.fit_gauss(y2)
+        leftCorr3, rightCorr3, leftWidth3, rightWidth3 = Template.fit_gauss(y3)
+        leftCorr4, rightCorr4, leftWidth4, rightWidth4 = Template.fit_gauss(y4)
+        leftCorr5, rightCorr5, leftWidth5, rightWidth5 = Template.fit_gauss(y5)
+        leftCorr6, rightCorr6, leftWidth6, rightWidth6 = Template.fit_gauss(y6)
         
         # Assert
         self.assertAlmostEqual(leftCorr1, rightCorr1, places=2)
+        self.assertAlmostEqual(leftCorr1, 0.99, places=1)
         self.assertAlmostEqual(leftCorr2, rightCorr2, places=2)
+        self.assertAlmostEqual(leftCorr2, 0.99, places=1)
         self.assertAlmostEqual(leftCorr3, rightCorr3, places=1) # the left is a bit worse than the right
+        self.assertAlmostEqual(leftCorr3, 0.99, places=1)
         self.assertAlmostEqual(leftCorr4, rightCorr4, places=2)
+        self.assertAlmostEqual(leftCorr4, 0.99, places=1)
+        self.assertAlmostEqual(leftCorr5, rightCorr5, places=2)
+        self.assertAlmostEqual(leftCorr5, 0, places=1)
+        self.assertTrue(leftCorr6 < 0)
+        self.assertAlmostEqual(rightCorr6, 1, places=1)
+    
+    def test_focus(self):
+        # Arrange
+        y1, y2, y3, y4, y5, y6 = _generate_template_y_arrays()
+        
+        # Act
+        leftFocus1, rightFocus1 = Template.fit_focus(y1)
+        leftFocus2, rightFocus2 = Template.fit_focus(y2)
+        leftFocus3, rightFocus3 = Template.fit_focus(y3)
+        leftFocus4, rightFocus4 = Template.fit_focus(y4)
+        leftFocus5, rightFocus5 = Template.fit_focus(y5)
+        leftFocus6, rightFocus6 = Template.fit_focus(y6)
+        
+        # Assert
+        self.assertEqual(leftFocus1, rightFocus1)
+        self.assertEqual(leftFocus1, 1) # focus point is at the exact centre
+        self.assertEqual(leftFocus2, rightFocus2)
+        self.assertEqual(leftFocus2, 1)
+        self.assertEqual(leftFocus3, rightFocus3)
+        self.assertEqual(leftFocus3, 1)
+        self.assertEqual(leftFocus4, rightFocus4)
+        self.assertEqual(leftFocus4, 1)
+        self.assertEqual(leftFocus5, rightFocus5)
+        self.assertAlmostEqual(leftFocus5, 0, places=1) # the Template is not perfectly balanced
+        self.assertEqual(leftFocus6, -1)
+        self.assertAlmostEqual(rightFocus6, np.max(y6[len(y6)//2:]) / np.max(y6), places=2)
 
 class TestMeiosisSimulator(unittest.TestCase):
     def test_basic(self):
