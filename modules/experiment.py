@@ -380,18 +380,37 @@ class Critic:
         if np.isclose(np.std(y), 0): # isclose to tolerate floating point inaccuracy
             return 0, None, None # a flat line should have 0 score; also speed up program and avoid divide by zero error later
         
-        # Fit a Guassian Template against this ED distribution
+        # Optimise the correlation between a Guassian Template and this ED distribution
         "This models an idealised QTL curve with a maximum peak and a variably-shaped slope to the edge minimum"
         leftCorr, rightCorr, leftWidth, rightWidth = Template.fit_gauss(y)
         
+        # Run a simple diagonal correlation to check directionality
+        "If the slope isn't right, we discount the entire score"
+        leftDiagCorr, rightDiagCorr, leftSlope, rightSlope = Template.fit_diagonal(y)
+        
+        if leftSlope < 0: # a negative slope means the left side goes '\' which is bad
+            leftCorr = 0
+        if rightSlope > 0: # a positive slop means the right side goes '/' which is bad
+            rightCorr = 0
+        
+        # Run regression of the optimised Guassian template against this ED distribution
+        "We use regression now to see if the data _actually_ fits well"
+        leftR2, rightR2 = Template.regress_gauss(y, leftWidth, rightWidth)
+        ## This is not doing what it needs to...
+        
+        if leftR2 < 0:
+            leftCorr = 0 # if the data does not follow the Guassian shape, neutralise the scoring
+        if rightR2 < 0:
+            rightCorr = 0
+        
         # Fit an inverse diagonal Template against this ED distribution
         "This models an actively misleading QTL curve that points away from the true causal allele"
-        leftInverseCorr, rightInverseCorr = Template.fit_inverse_diagonal(y)
+        leftInverseR2, rightInverseR2 = Template.fit_inverse_diagonal(y)
         
-        if leftInverseCorr > 0: # if an inverse diagonal Template fits the data well
-            leftCorr = min(leftCorr, -leftInverseCorr)
-        if rightInverseCorr > 0:
-            rightCorr = min(rightCorr, -rightInverseCorr)
+        if leftInverseR2 > 0: # if an inverse diagonal Template fits the data well
+            leftCorr = min(leftCorr, -leftInverseR2)
+        if rightInverseR2 > 0:
+            rightCorr = min(rightCorr, -rightInverseR2)
         
         # Penalise a side if it has a low magnitude difference from min->max
         centre = len(y) // 2
@@ -404,7 +423,17 @@ class Critic:
         rightScalingFactor = Critic.penalty(rightY, globalMax, left=False)
         
         # Return the optimal score
-        score = ((leftCorr * leftScalingFactor) + (rightCorr * rightScalingFactor)) / 2
+        if leftCorr > 0:
+            leftScore = leftCorr * leftScalingFactor
+        else:
+            leftScore = leftCorr # do not use the scaling factor
+        
+        if rightCorr > 0:
+            rightScore = rightCorr * rightScalingFactor
+        else:
+            rightScore = rightCorr
+        
+        score = (leftScore + rightScore) / 2
         
         return score, leftWidth, rightWidth
     
