@@ -142,3 +142,66 @@ class Calculator:
             distances.append(np.power(edist, power))
         
         return np.array(distances)
+    
+    @staticmethod
+    def interpolate(xprev, xnext, yprev, ynext):
+        '''
+        Calculate the slope between two points (xprev, yprev) and (xnext, ynext)
+        and return the interpolated y values spanning the space between.
+        
+        Parameters:
+            xprev -- the x value of the previous point
+            xnext -- the x value of the next point
+            yprev -- the y value of the previous point
+            ynext -- the y value of the next point
+        Returns:
+            y -- the interpolated y values
+        '''
+        return np.linspace(yprev, ynext, num=xnext-xprev)
+    
+    @staticmethod
+    def interpolate_popsize_milestones(plotDF, bootstraps):
+        '''
+        Assesses data being plotted to locate milestones to mark. These milestones correspond to the lowest
+        population size necessary to achieve a certain confidence or likelihood that an experiment would have
+        at least as much "success" with QTL prediction, as defined by the signal strength.
+        
+        Interpolation occurs since not all parameter combinations are evenly dispersed over a range, and we would
+        like to give the most granular estimate possible.
+        
+        Returns:
+            weak95 -- an integer of the pop. size which first has >=95% samples with at least a weak signal
+            mid95 -- an integer of the pop. size which first has >=95% samples with at least a mid/intermediate signal
+            strong95 -- an integer of the pop. size which first has >=95% samples with at least a strong signal
+        '''
+        CUTOFF = 0.95
+        
+        THRESHOLD_COLUMNS = ["atleast_weak", "atleast_mid", "strong_signal"]
+        
+        # Figure out the number of replications needed to reach the threshold
+        thresholdPoint = np.ceil(bootstraps * CUTOFF)
+        
+        # Quantify the number of replications that support each strength category
+        plotDF["atleast_weak"] = plotDF["weak_signal"] + plotDF["moderate_signal"] + plotDF["strong_signal"]
+        plotDF["atleast_mid"] = plotDF["moderate_signal"] + plotDF["strong_signal"]
+        "plotDF['strong'] already represents 'atleast_strong'"
+        
+        # Get interpolated milestone counts
+        milestones = { key: None for key in THRESHOLD_COLUMNS }
+        x = plotDF["pop_size"].tolist()
+        for column in THRESHOLD_COLUMNS:
+            y = plotDF[column].tolist()
+            for xindex in range(1, len(x)):
+                xprev, xnext = x[xindex - 1], x[xindex]
+                yprev, ynext = y[xindex - 1], y[xindex]
+                interpolatedY = Calculator.interpolate(xprev, xnext, yprev, ynext)
+                
+                # See if a milestone point occurs within this interpolated region
+                condition = interpolatedY >= thresholdPoint
+                if np.any(condition):
+                    interpolatedIndex = np.argmax(condition)
+                    milestonePopSize = xprev + interpolatedIndex
+                    milestones[column] = milestonePopSize
+                    break
+        
+        return milestones

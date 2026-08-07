@@ -65,13 +65,12 @@ class Locations:
     def outputTSV(self):
         return os.path.join(self.workingDirectory, "report.tsv")
     
-    @property
-    def outputPNG(self):
-        return os.path.join(self.workingDirectory, "stacked_barplot.png")
+    # Attributes with value input
+    def outputPNG(self, value):
+        return os.path.join(self.workingDirectory, f"stacked_barplot.{value}.png")
     
-    @property
-    def outputPDF(self):
-        return os.path.join(self.workingDirectory, "stacked_barplot.pdf")
+    def outputPDF(self, value):
+        return os.path.join(self.workingDirectory, f"stacked_barplot.{value}.pdf")
     
     # Methods
     def init_dirs(self, quiet=True):
