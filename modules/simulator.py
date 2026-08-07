@@ -151,7 +151,7 @@ class MeiosisSimulator(BaseSimulator):
             
             gamete.append(chromosome.array[loci, haplotypeChoice])
         
-        return np.concat(gamete)
+        return np.concatenate(gamete)
     
     def cross(self, batchSize=1000):
         '''
