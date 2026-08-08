@@ -15,6 +15,7 @@ from PIL import Image
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.experiment import Critic
 from modules.spreadsheet import Spreadsheet
+from modules.statistics import Calculator
 
 IMG_WIDTH = 525
 IMG_HEIGHT = 525
@@ -180,11 +181,59 @@ def plot_replicate_exemplars(locations, configuration):
             
             image.save(plotFileName)
 
+def _separate_thresholds(thresholds, delta):
+    '''
+    Modifies the x coordinates of marker threshold lines to ensure
+    the visibility of any overlapping markers.
+    
+    Parameters:
+        thresholds -- a list of (name, x, colour) tuples
+        delta -- a float giving the minimum spacing needed between
+                 adjacent threshold lines
+    Returns:
+        adjustedThresholds -- a list akin to the input thresholds
+                              but with modifications to the x value
+                              to prevent overlap
+    '''
+    if len(thresholds) <= 1:
+        return thresholds
+    
+    # Drop None values
+    thresholds = thresholds[thresholds[:,1] != None]
+    if len(thresholds) == 0:
+        return []
+    
+    # Sort by original x-coordinate
+    thresholds = thresholds[thresholds[:, 1].argsort()]
+    
+    # Cluster into groups where the gaps do not exceed delta
+    diffs = np.diff(thresholds[:,1])
+    splitAt = np.where(diffs > delta)[0] + 1
+    clusters = np.split(thresholds, splitAt)
+    
+    # Adjust x values for each group
+    adjusted = []
+    
+    for group in clusters:
+        # Single-member clusters need no adjustment
+        if len(group) == 1:
+            adjusted.append(tuple(group[0]))
+            continue
+        
+        # Multi-member clusters get spaced around the mean
+        centre = np.mean([x for _, x, _ in group])
+        
+        for i, (name, _, colour) in enumerate(group):
+            offset = (i - (len(group) - 1) / 2) * delta
+            adjusted.append((name, centre + offset, colour))
+    
+    return adjusted
+
 def plot_report(locations, configuration):
     SIGNAL_COLUMNS = ["no_signal", "weak_signal", "moderate_signal", "strong_signal"]
     NUM_X_TICKS = 8
     
-    if not (os.path.isfile(locations.outputTSV) and os.path.isfile(args.locations.outputTSV + Locations.OKAY_SUFFIX)):
+    if not (os.path.isfile(locations.outputTSV) and os.path.isfile(locations.outputTSV + locations.OKAY_SUFFIX)):
         raise FileNotFoundError(f"Results report file '{locations.outputTSV}' must exist with an associated " + 
                                 f"'{Locations.OKAY_SUFFIX}' flag file for a plot to be produced.")
     
@@ -194,6 +243,10 @@ def plot_report(locations, configuration):
     minPopSize = reportDF["pop_size"].min()
     maxPopSize = reportDF["pop_size"].max()
     
+    # Derive threshold marker line details
+    "This is the minimum spacing needed between each marker line to maintain visibility"
+    DELTA = int(np.ceil((maxPopSize - minPopSize) * 0.005))
+    
     # Format a composite plot
     for qtlNum in reportDF["qtl"].unique():
         # Derive file names and skip if they exist
@@ -201,22 +254,43 @@ def plot_report(locations, configuration):
         outputPDF = locations.outputPDF(qtlNum)
         
         if os.path.isfile(outputPNG) and os.path.isfile(outputPDF):
-            print(f"# Stacked barplots for QTL #{qtlNum} already exist; skipping...")
+            print(f"# Stacked barplot for QTL #{qtlNum} already exists; skipping...")
             continue
         
         # Setup figure object
-        ncol = int(len(configuration.phenotypeError) / 2) # 2==faceted rows; should result in 3
-        nrow = int(len(configuration.popBalance) * 2) + 1 # +1 is a spacing row
+        ncol = int(len(configuration.phenotypeError) / 2) # 2==faceted rows; should result in 3 columns
+        nrow = int(len(configuration.popBalance) * 2) + 1 # +1 is a spacing row; should result in 11 rows
         fig, axes = plt.subplots(nrows=nrow, ncols=ncol,
-                                 figsize=(20, 8),
+                                 figsize=(20, 12),
                                  dpi=300,
-                                 layout="constrained")
+                                 constrained_layout=False)
+        fig.subplots_adjust(
+            left=0.05,
+            bottom=0.06,
+            top=0.95,
+            right=0.90,
+            hspace=0.15,
+            wspace=0.08
+        )
         
         # Blank the middle spacing row
         for colIndex in range(ncol):
             axes[len(configuration.popBalance), colIndex].axis("off")
         
+        # Add titles above each phenotypeError plot group
+        groupTopRows = [0, len(configuration.popBalance) + 1]
+        for i, phenotypeError in enumerate(configuration.phenotypeError):
+            colIndex = i % ncol
+            facetRow = i // ncol
+            
+            axes[groupTopRows[facetRow], colIndex].set_title(
+                f"Phenotype error: {int(phenotypeError*100)}%",
+                fontsize=14,
+                pad=10
+            )
+        
         # Iterate over each configuration combination
+        markers = {}
         for i, phenotypeError in enumerate(configuration.phenotypeError):
             colIndex = i % ncol
             
@@ -249,21 +323,19 @@ def plot_report(locations, configuration):
                 ax.margins(0,0) # fill all of the rectangular space
                 
                 # Mark the 95% cutoffs
-                if milestones["atleast_weak"]:
-                    mark1 = ax.vlines(milestones["atleast_weak"],
-                            ymin=0, ymax=bootstraps,
-                            linestyle="--", color="white",
-                            label="Weak")
-                if milestones["atleast_mid"]:
-                    mark2 = ax.vlines(milestones["atleast_mid"],
-                            ymin=0, ymax=bootstraps,
-                            linestyle="--", color="black",
-                            label="Moderate")
-                if milestones["strong_signal"]:
-                    mark3 = ax.vlines(milestones["strong_signal"],
-                            ymin=0, ymax=bootstraps,
-                            linestyle="--", color="#FFFF00",
-                            label="Strong")
+                thresholds = np.array([
+                    ("Weak", milestones["atleast_weak"], "white"),
+                    ("Moderate", milestones["atleast_mid"], "black"),
+                    ("Strong", milestones["strong_signal"], "#FFFF00")
+                ], dtype=object)
+                thresholds = _separate_thresholds(thresholds, DELTA) # prevent overlap
+                
+                for labelStr, xCoord, colourStr in thresholds:
+                    marker = ax.vlines(xCoord,
+                                       ymin=0, ymax=bootstraps,
+                                       linestyle="--", color=colourStr,
+                                       label=labelStr)
+                    markers.setdefault(labelStr, marker)
                 
                 # Set axis limits
                 ax.set_ylim(0, bootstraps)
@@ -275,24 +347,36 @@ def plot_report(locations, configuration):
                 dtype=np.int64))
                 
                 ax.set_yticks([0, bootstraps//2, bootstraps],
-                              labels=["0%", "50%", "100%"])
+                              labels=["", "50%", "100%"]) # don't show 0% to prevent text overlap
                 
                 # Turn off axis labels if applicable
                 if x != len(configuration.popBalance) - 1:
                     ax.set_xticklabels([])
                 if colIndex != 0:
                     ax.set_yticklabels([])
+        markers = list(markers.values())
         
         # Configure the legend
-        legend1 = plt.legend(handles=stack,
-                             bbox_to_anchor=(1.05, 1.0),
-                             loc="upper right")
-        fig.add_artist(legend1)
+        fig.legend(
+            title="Signal Strength",
+            facecolor="lightgrey",
+            edgecolor="black",
+            handles=stack,
+            loc="lower left",
+            bbox_to_anchor=(0.91, 0.5105, 0.08, 0.15), # right side slightly above middle
+            mode="expand"
+        )
         
-        legend2 = plt.legend(handles=[mark1, mark2, mark3],
-                             bbox_to_anchor=(1.05, 1.0),
-                             loc="lower right")
+        fig.legend(
+            title="Signal Threshold",
+            facecolor="lightgrey",
+            edgecolor="black",
+            handles=markers,
+            loc="upper left",
+            bbox_to_anchor=(0.91, 0.35, 0.08, 0.15), # right side slightly below middle
+            mode="expand"
+        )
         
         # Write output files
-        fig.savefig(outputPNG) # pad_inches=1.5
-        fig.savefig(outputPDF) # pad_inches=1.5
+        fig.savefig(outputPNG)
+        fig.savefig(outputPDF)

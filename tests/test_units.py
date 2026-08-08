@@ -23,6 +23,7 @@ from modules.genotype import Genotype # note that the Genotype class is implicit
 from modules.locations import Locations
 from modules.parsing import parse_genotypes, parse_combination, parse_linkage, parse_qtl_encoding
 from modules.population import Population
+from modules.reporting import _separate_thresholds
 from modules.simulator import MeiosisSimulator
 from modules.spreadsheet import Spreadsheet
 from modules.statistics import RandomNumberGenerator, Calculator
@@ -1318,6 +1319,53 @@ class TestMeiosisSimulator(unittest.TestCase):
         
         uniqueAlleles = set([ tuple(x) for x in offspring[0]])
         self.assertTrue(len(uniqueAlleles) != 1) # recombination is occurring
+
+class TestReporting(unittest.TestCase):
+    def test_separate_thresholds(self):
+        # Arrange
+        delta = 5
+        
+        thresholds1 = np.array([
+            ["1", 205, "1"],
+            ["2", 205, "2"],
+            ["3", 205, "3"]
+        ], dtype=object)
+        thresholds2 = np.array([
+            ("1", 200, "1"),
+            ("2", 205, "2"),
+            ("3", 210, "3")
+        ], dtype=object)
+        thresholds3 = np.array([
+            ("1", 200, "1"),
+            ("2", 204, "2"),
+            ("3", 208, "3")
+        ], dtype=object)
+        thresholds4 = np.array([
+            ("1", 200, "1"),
+            ("2", 204, "2"),
+            ("3", 209, "3")
+        ], dtype=object)
+        thresholds5 = np.array([
+            ("1", None, "1"),
+            ("2", None, "2"),
+            ("3", None, "3")
+        ], dtype=object)
+        
+        expectedLabels = ["1", "2", "3"]
+        
+        # Act
+        result1 = _separate_thresholds(thresholds1, delta)
+        result2 = _separate_thresholds(thresholds2, delta)
+        result3 = _separate_thresholds(thresholds3, delta)
+        result4 = _separate_thresholds(thresholds4, delta)
+        result5 = _separate_thresholds(thresholds5, delta)
+        
+        # Assert
+        self.assertEqual([ x[1] for x in result1 ], [200, 205, 210])
+        self.assertEqual([ x[1] for x in result2 ], [200, 205, 210])
+        self.assertEqual([ x[1] for x in result3 ], [199, 204, 209])
+        self.assertEqual([ int(x[1]) for x in result4 ], [199, 204, 209]) # there is some fractional 0.3333
+        self.assertEqual(result5, [])
 
 if __name__ == '__main__':
     cleanup()

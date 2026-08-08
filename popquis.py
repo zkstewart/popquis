@@ -13,7 +13,7 @@ from modules.breeder import Breeder
 from modules.experiment import Configuration, Coordinator, Critic
 from modules.locations import Locations
 from modules.parsing import parse_qtl_encoding
-from modules.reporting import write_report_tsv, plot_replicate_exemplars
+from modules.reporting import write_report_tsv, plot_replicate_exemplars, plot_report
 from modules.validation import validate_args, validate_breeding_population
 
 def main():
@@ -149,7 +149,7 @@ def main():
     plot_replicate_exemplars(args.locations, configuration)
     
     # Produce the final stacked barplot visualisation
-    ## TBD
+    plot_report(args.locations, configuration)
     
     print("Program completed successfully!")
 
