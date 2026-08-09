@@ -200,7 +200,7 @@ class Coordinator:
         g2Array = g2Array.transpose(1, 0, 2).reshape(group2.variants, -1) # ends as (variants, individuals * ploidy)
         
         # Calculate Euclidean distance for each genotype and return
-        return Calculator.euclidean_distance(g1Array, g2Array, power)
+        return Calculator.fast_euclidean_distance(g1Array, g2Array, power)
     
     def run(self, configuration, qtlRanges, threads, bootstraps=1000, power=4):
         '''

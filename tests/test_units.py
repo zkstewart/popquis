@@ -989,7 +989,8 @@ class TestCalculatorCounter(unittest.TestCase):
         self.assertTrue(np.array_equal(counts3, expectedCounts3))
 
 class TestCalculatorEuclideanDistance(unittest.TestCase):
-    def test_when_valid(self):
+    def test_original_ed_validity(self):
+        "Compare a manually performed calculation to the original implementation"
         # Arrange
         alleles1 = np.array([
             [0,0,0,0],
@@ -1034,6 +1035,34 @@ class TestCalculatorEuclideanDistance(unittest.TestCase):
         
         # Assert
         self.assertTrue(np.array_equal(edist, expectedValues))
+    
+    def test_fast_ed_validity(self):
+        "Tests an optimised ED implementation against the well-tested original version"
+        rng = RandomNumberGenerator(1234)
+        numReps = 1000
+        for _ in range(numReps):
+            # Arrange
+            alleles1 = np.array([
+                [ rng.integers(0, 4) for _ in range(4) ],
+                [ rng.integers(0, 4) for _ in range(4) ],
+                [ rng.integers(0, 4) for _ in range(4) ],
+                [ rng.integers(0, 4) for _ in range(4) ],
+                [ rng.integers(0, 4) for _ in range(4) ]
+            ])
+            alleles2 = np.array([
+                [ rng.integers(0, 4) for _ in range(4) ],
+                [ rng.integers(0, 4) for _ in range(4) ],
+                [ rng.integers(0, 4) for _ in range(4) ],
+                [ rng.integers(0, 4) for _ in range(4) ],
+                [ rng.integers(0, 4) for _ in range(4) ]
+            ])
+            
+            # Act
+            orig = Calculator.euclidean_distance(alleles1, alleles2, power=4)
+            new = Calculator.fast_euclidean_distance(alleles1, alleles2)
+            
+            # Assert
+            self.assertTrue(np.array_equal(orig, new))
 
 class TestCritic(unittest.TestCase):
     def test_when_valid(self):

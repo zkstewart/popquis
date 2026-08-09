@@ -105,6 +105,11 @@ class Calculator:
     @staticmethod
     def euclidean_distance(array1, array2, power=4):
         '''
+        This implementation of the Euclidean distance formula is highly similar
+        to the original psQTL implementation, and has been robustly tested. However,
+        it makes use of slow python object types. It remains here in popquis
+        as a point of comparison for automated testing.
+        
         Parameters:
             array1 / array2 -- numpy arrays with alleles provided as integers in shape akin
                                to: (num_variants, num_alleles). The calculation allows for
@@ -142,6 +147,51 @@ class Calculator:
             distances.append(np.power(edist, power))
         
         return np.array(distances)
+    
+    @staticmethod
+    def fast_euclidean_distance(array1, array2, power=4):
+        '''
+        A reimplementation of the Euclidean distance formula using numpy functions
+        to provide at least ~8x speed benefit over the original approach.
+        
+        Parameters:
+            array1 / array2 -- numpy arrays with alleles provided as integers in shape akin
+                               to: (num_variants, num_alleles). The calculation allows for
+                               num_alleles to differ, but num_variants must be consistent
+                               or you should expect a truncated output. For efficiency
+                               reasons this function will not attempt to catch any
+                               shape incompatibilities.
+            power -- an integer giving the power to raise each Euclidean distance value to;
+                     default and recommended value is 4
+        Returns:
+            edist -- a numpy array of float values giving the Euclidean distance of each variant
+                     after raising to the power value
+        '''
+        numVariants = len(array1)
+        
+        # Reshape both arrays to (numVariants, -1) to handle the allele dimension uniformly
+        a1 = np.asarray(array1).reshape(numVariants, -1)
+        a2 = np.asarray(array2).reshape(numVariants, -1)
+        
+        numAlleles1 = a1.shape[1]
+        numAlleles2 = a2.shape[1]
+        
+        # Find the maximum allele value to determine how many bins we need for counting
+        max_allele = max(a1.max(), a2.max()) + 1 # VCF GT encoding means the highest int is the number of alleles
+        
+        # Fully vectorised counting using broadcasting
+        alleles_range = np.arange(max_allele)
+        freqs1 = np.sum((a1[:, :, None] == alleles_range), axis=1, dtype=np.float64) / numAlleles1
+        freqs2 = np.sum((a2[:, :, None] == alleles_range), axis=1, dtype=np.float64) / numAlleles2
+        
+        ## The vectorised broadcast shows marginal optimisation benefit over the below bincount based implementation
+        # freqs1 = np.array([np.bincount(row, minlength=max_allele) for row in a1], dtype=np.float64) / numAlleles1
+        # freqs2 = np.array([np.bincount(row, minlength=max_allele) for row in a2], dtype=np.float64) / numAlleles2
+        
+        # Sum the squared differences between frequencies across all alleles
+        distances = np.sqrt(((freqs1 - freqs2) ** 2).sum(axis=1))
+        
+        return np.power(distances, power)
     
     @staticmethod
     def interpolate(xprev, xnext, yprev, ynext):
