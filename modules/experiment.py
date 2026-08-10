@@ -439,14 +439,18 @@ class Critic:
                          scores have been summarised into one of four different categories ordered
                          as: [none, weak, moderate, strong]
         '''
-        strengths = []
-        for popSizeArray in scores:
-            noSignal = sum((popSizeArray < Critic.WEAK_SCORE) | (np.isnan(popSizeArray)))
-            weakSignal = sum((popSizeArray >= Critic.WEAK_SCORE) & (popSizeArray < Critic.MID_SCORE))
-            moderateSignal = sum((popSizeArray >= Critic.MID_SCORE) & (popSizeArray < Critic.STRONG_SCORE))
-            strongSignal = sum(popSizeArray >= Critic.STRONG_SCORE)
-            strengths.append([noSignal, weakSignal, moderateSignal, strongSignal])
-        return np.array(strengths)
+        cats = (
+            (scores >= Critic.WEAK_SCORE).astype(np.uint8) +
+            (scores >= Critic.MID_SCORE).astype(np.uint8) +
+            (scores >= Critic.STRONG_SCORE).astype(np.uint8)
+        )
+        
+        cats[np.isnan(scores)] = 0
+        
+        return np.stack(
+            [(cats == i).sum(axis=1) for i in range(4)],
+            axis=1
+        )
     
     def run(self, configuration):
         '''

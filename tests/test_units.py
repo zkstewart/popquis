@@ -1120,6 +1120,22 @@ class TestCritic(unittest.TestCase):
         self.assertTrue(leftCorr > criticScore) # Critic penalises the lack of magnitude/prominence
         self.assertAlmostEqual(leftCorr, 1) # without Critic penalisation the correlation is very good
     
+    def test_strengths(self):
+        # Arrange
+        scores = np.array([
+            [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+            [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+            [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        ])
+        
+        # Act
+        strengths = Critic.scores_to_strength(scores)
+        
+        # Assert
+        self.assertEqual(scores.shape[0], strengths.shape[0])
+        for popSizeStrengths in strengths:
+            self.assertTrue(np.array_equal(popSizeStrengths, [3, 2, 3, 3]))
+    
     def test_run(self):
         # Arrange
         cleanup()
@@ -1201,7 +1217,8 @@ class TestCritic(unittest.TestCase):
         strengths = Critic.scores_to_strength(scores) # shape = (popSize, 4)
         
         # Assert
-        ## TBD...
+        self.assertEqual(scores.shape, (numSizes, bootstraps))
+        self.assertEqual(strengths.shape, (numSizes, 4))
         
         # Clean up
         cleanup()
