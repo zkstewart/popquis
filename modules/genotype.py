@@ -64,6 +64,10 @@ class Genotype:
                                            "this likely means the number has a zero prefix which has been " +
                                            "ignored during integer conversion, and suggests that your input " +
                                            "may be incorrectly specified.")
+            if intvalue > 255:
+                raise InvalidGenotypeError(f"Genotype '{value}' has an allele '{svalue}' which is an " +
+                                           "integer value exceeding 255. Data will later be stored as " +
+                                           "numpy.uint8 which is incompatible with numbers > 255.")
             accepted.append(intvalue)
         
         # Store validated alleles

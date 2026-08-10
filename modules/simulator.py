@@ -80,6 +80,12 @@ class MeiosisSimulator(BaseSimulator):
         self.parent2 = genome2
         self.rng = RandomNumberGenerator(seed)
         self.isMeiosisSimulator = True # object type validator
+        
+        # Pre-cache a highly used process
+        self._cm_positions = {
+            chrID : self.genomeMap[chrID].df["cM"].to_numpy()
+            for chrID in self.genomeMap.chromIDs
+        }
     
     @property
     def nu(self):
@@ -135,7 +141,7 @@ class MeiosisSimulator(BaseSimulator):
         '''
         gamete = []
         for chromosome in genome:
-            cmPositions = self.genomeMap[chromosome.chromID].df["cM"].to_numpy()
+            cmPositions = self._cm_positions[chromosome.chromID]
             
             crossovers = self._generate_crossovers(cmPositions) # cM position where a crossover occurs
             haplotype = self.rng.integers(0, chromosome.ploidy) # randomly choose the starting haplotype
@@ -162,11 +168,12 @@ class MeiosisSimulator(BaseSimulator):
         Returns:
             f1 -- a numpy array with shape: (individuals, variants, ploidy)
         '''
-        f1 = []
-        for i in range(batchSize):
-            parent1Gamete = self.generate_gamete(self.parent1)
-            parent2Gamete = self.generate_gamete(self.parent2)
-            offspring = np.column_stack([parent1Gamete, parent2Gamete])
-            f1.append(offspring)
+        numVariants = self.parent1.variants
+        f1 = np.empty((batchSize, numVariants, 2),
+                      dtype=np.uint8)
         
-        return np.asarray(f1)
+        for i in range(batchSize):
+            f1[i, :, 0] = self.generate_gamete(self.parent1)
+            f1[i, :, 1] = self.generate_gamete(self.parent2)
+        
+        return f1

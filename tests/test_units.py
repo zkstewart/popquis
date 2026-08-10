@@ -31,6 +31,7 @@ from modules.template import Template
 
 # Specify data locations
 testDir = os.path.dirname(os.path.abspath(__file__))
+dataDir = os.path.join(testDir, "data")
 tmpDir = os.path.join(testDir, "tmp")
 
 # Define initial clean up function
@@ -1314,42 +1315,43 @@ class TestTemplate(unittest.TestCase):
         self.assertEqual(leftFocus6, -1)
         self.assertAlmostEqual(rightFocus6, np.max(y6[len(y6)//2:]) / np.max(y6), places=2)
 
+def _generate_simulator_requisites(length):
+    chromID1 = "chr1"
+    chromID2 = "chr2"
+    positions = [50, 100, 150]
+    cmMbp = 3 * 1000000
+    snpMbp = int(1e6)
+    genotypeHomRef = Genotype("0/0")
+    genotypeHet = Genotype("0/1")
+    genotypeHomAlt = Genotype("1/1")
+    
+    chromMap1 = ChromosomeMap(chromID1, length, cmMbp, snpMbp, positions) # 1 SNP per bp
+    chromMap2 = ChromosomeMap(chromID2, length, cmMbp, snpMbp, positions) # 1 SNP per bp
+    chromosome1 = Chromosome(chromID1, positions, [genotypeHet]*len(positions), chromMap1)
+    chromosome2 = Chromosome(chromID2, positions, [genotypeHet]*len(positions), chromMap2)
+    
+    genomeMap = GenomeMap()
+    genomeMap[chromID1] = chromMap1
+    genomeMap[chromID2] = chromMap2
+    
+    parent1 = Genome()
+    parent1[chromID1] = chromosome1
+    parent1[chromID2] = chromosome2
+    
+    parent2 = Genome()
+    parent2[chromID1] = chromosome1
+    parent2[chromID2] = chromosome2
+    
+    return parent1, parent2, genomeMap
+
 class TestMeiosisSimulator(unittest.TestCase):
     def test_basic(self):
         """Most simple test to assert that recombination is being modelled in some way,
         and that the data structures like Genome and GenomeMap are properly working
         with the composition of underlying Chromosome and ChromosomeMap classes"""
-        cleanup()
-        os.makedirs(tmpDir, exist_ok=True)
-        locations = Locations(tmpDir)
-        
         # Arrange
-        chromID1 = "chr1"
-        chromID2 = "chr2"
-        positions = [50, 100, 150]
         length = 200
-        cmMbp = 3 * 1000000
-        snpMbp = int(1e6)
-        genotypeHomRef = Genotype("0/0")
-        genotypeHet = Genotype("0/1")
-        genotypeHomAlt = Genotype("1/1")
-        
-        chromMap1 = ChromosomeMap(chromID1, length, cmMbp, snpMbp, positions) # 1 SNP per bp
-        chromMap2 = ChromosomeMap(chromID2, length, cmMbp, snpMbp, positions) # 1 SNP per bp
-        chromosome1 = Chromosome(chromID1, positions, [genotypeHet]*len(positions), chromMap1)
-        chromosome2 = Chromosome(chromID2, positions, [genotypeHet]*len(positions), chromMap2)
-        
-        genomeMap = GenomeMap()
-        genomeMap[chromID1] = chromMap1
-        genomeMap[chromID2] = chromMap2
-        
-        parent1 = Genome()
-        parent1[chromID1] = chromosome1
-        parent1[chromID2] = chromosome2
-        
-        parent2 = Genome()
-        parent2[chromID1] = chromosome1
-        parent2[chromID2] = chromosome2
+        parent1, parent2, genomeMap = _generate_simulator_requisites(length)
         
         batchSize = 1
         ploidy = 2
@@ -1365,6 +1367,25 @@ class TestMeiosisSimulator(unittest.TestCase):
         
         uniqueAlleles = set([ tuple(x) for x in offspring[0]])
         self.assertTrue(len(uniqueAlleles) != 1) # recombination is occurring
+    
+    def test_expectations(self):
+        """The Simulator, when given a consistent seed, should produce consistent
+        and predictable results. If any changes or optimisations occur in the
+        MeiosisSimulator class, they should not affect the results herein as
+        a way of validating that code optimisations have not impacted
+        core and expected functionality"""
+        # Arrange
+        length = 200
+        parent1, parent2, genomeMap = _generate_simulator_requisites(length)
+        
+        expectedArray = np.load(os.path.join(dataDir, "offspring.npy"))
+        
+        # Act
+        simulator = MeiosisSimulator(parent1, parent2, genomeMap)
+        offspring = simulator.cross(batchSize=10)
+        
+        # Assert
+        self.assertTrue(np.array_equal(expectedArray, offspring))
 
 class TestReporting(unittest.TestCase):
     def test_separate_thresholds(self):
