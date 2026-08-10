@@ -135,6 +135,18 @@ def parse_qtl_encoding(qtls, combination, linkage, weakDistance, moderateDistanc
             if parent1.ploidy != lastPloidy:
                 raise ValueError("QTLs provided to popquis -q must all be of the same ploidy level; " + 
                                  f"{thisQTL} differs from {qtls[i-1]}")
+        
+        uniqueAlleles = sorted(set([ y for x in genotypes for y in x.alleles ]))
+        if uniqueAlleles[0] != 0:
+            raise ValueError("The three genotypes provided to popquis -q must conform to standard VCF " +
+                             "style formatting; there should be a '0' allele but " +
+                             f"the lowest genotype integer provided was '{uniqueAlleles[0]}'")
+        if uniqueAlleles[-1] != (len(uniqueAlleles) - 1):
+            raise ValueError("The three genotypes provided to popquis -q must conform to standard VCF " +
+                             f"style formatting; you provided '{len(uniqueAlleles)}' unique alleles " +
+                             "which means the highest genotype integer should be " + 
+                             f"'{len(uniqueAlleles)-1}' but instead we found it to be '{uniqueAlleles[-1]}'")
+        
         qtlGenotypes.append(genotypes)
         lastPloidy = parent1.ploidy
     
