@@ -24,8 +24,8 @@ LABEL_WIDTH = IMG_WIDTH//4
 
 STACK_COLOURS = ["#E24A33", "#348ABD", "#988ED5", "#777777"]
 
-def write_report_tsv(locations, configuration):
-    with open(locations.outputTSV, "w") as fileOut:
+def write_raw_tsv(locations, configuration):
+    with open(locations.rawTSV, "w") as fileOut:
         fileOut.write(f"pop_balance\tphenotype_error\tqtl\tpop_size\tno_signal\tweak_signal\tmoderate_signal\tstrong_signal\n")
         
         for (popBalance, phenotypeError), popSizes in configuration:
@@ -231,8 +231,10 @@ def _separate_thresholds(thresholds, delta, info=None):
             adjusted.append((name, newX, colour))
             if info:
                 error, balance, qtl = info["error"], info["balance"], info["qtl"]
-                print(f"QTL #{qtl} barplot with phenotype error '{error}' and " + 
-                      f"balance '{balance}' had the {name} threshold visually " + 
+                error = int(error * 100)
+                balance = int(balance * 100)
+                print(f"QTL #{qtl} barplot with phenotype error '{error}%' and " + 
+                      f"balance '{balance}%' had the {name} threshold visually " + 
                       f"adjusted to prevent overlap; actual value is {originalX} " +
                       f"but line was plotted at {newX}")
     
@@ -242,12 +244,12 @@ def plot_report(locations, configuration):
     SIGNAL_COLUMNS = ["no_signal", "weak_signal", "moderate_signal", "strong_signal"]
     NUM_X_TICKS = 8
     
-    if not (os.path.isfile(locations.outputTSV) and os.path.isfile(locations.outputTSV + locations.OKAY_SUFFIX)):
-        raise FileNotFoundError(f"Results report file '{locations.outputTSV}' must exist with an associated " + 
+    if not (os.path.isfile(locations.rawTSV) and os.path.isfile(locations.rawTSV + locations.OKAY_SUFFIX)):
+        raise FileNotFoundError(f"Raw results file '{locations.rawTSV}' must exist with an associated " + 
                                 f"'{Locations.OKAY_SUFFIX}' flag file for a plot to be produced.")
     
     # Parse the tabulated data and derive some global parameters
-    reportDF = pd.read_csv(locations.outputTSV, sep="\t")
+    reportDF = pd.read_csv(locations.rawTSV, sep="\t")
     bootstraps = reportDF.iloc[0][SIGNAL_COLUMNS].sum()
     minPopSize = reportDF["pop_size"].min()
     maxPopSize = reportDF["pop_size"].max()
@@ -257,14 +259,18 @@ def plot_report(locations, configuration):
     DELTA = int(np.ceil((maxPopSize - minPopSize) * 0.005))
     
     # Format a composite plot
+    foundMilestones = {}
     for qtlNum in reportDF["qtl"].unique():
-        # Derive file names and skip if they exist
+        # Derive file names
         outputPNG = locations.outputPNG(qtlNum)
         outputPDF = locations.outputPDF(qtlNum)
         
-        if os.path.isfile(outputPNG) and os.path.isfile(outputPDF):
-            print(f"# Stacked barplot for QTL #{qtlNum} already exists; skipping...")
-            continue
+        ## Do not skip if the file already exists, as 1) we should be able to
+        ## safely allow this, and 2) we want the milestones calculations for
+        ## the final step of popquis
+        # if os.path.isfile(outputPNG) and os.path.isfile(outputPDF):
+        #     print(f"# Stacked barplot for QTL #{qtlNum} already exists; skipping...")
+        #     continue
         
         # Setup figure object
         ncol = int(len(configuration.phenotypeError) / 2) # 2==faceted rows; should result in 3 columns
@@ -318,6 +324,7 @@ def plot_report(locations, configuration):
                 
                 # Calculate signal threshold values
                 milestones = Calculator.interpolate_popsize_milestones(plotDF, bootstraps)
+                foundMilestones[(qtlNum, phenotypeError, popBalance)] = milestones
                 
                 # Create stackplot of the data
                 stack = ax.stackplot(plotDF["pop_size"],
@@ -394,3 +401,32 @@ def plot_report(locations, configuration):
         # Write output files
         fig.savefig(outputPNG)
         fig.savefig(outputPDF)
+    
+    # Return the milestones for separate tabulated output
+    return foundMilestones
+
+def write_thresholds_tsv(locations, configuration, foundMilestones):
+    THRESHOLD_KEYS = ["atleast_weak", "atleast_mid", "strong_signal"]
+    FORMATTED_KEYS = ["weak", "moderate", "strong"] # prettier for presentation
+    
+    with open(locations.thresholdsTSV, "w") as fileOut:
+        fileOut.write(f"pop_balance\tphenotype_error\tqtl\tthreshold\tnum_samples\n")
+        
+        for (popBalance, phenotypeError), popSizes in configuration:
+            if popSizes is None:
+                continue
+            
+            qtlNum = 0
+            while True:
+                qtlNum += 1
+                
+                try:
+                    milestones = foundMilestones[(qtlNum, phenotypeError, popBalance)]
+                except:
+                    break
+                
+                for dictKey, displayKey in zip(THRESHOLD_KEYS, FORMATTED_KEYS):
+                    value = milestones[dictKey]
+                    fileOut.write("\t".join(map(str, [
+                        popBalance, phenotypeError, qtlNum, displayKey, value
+                    ])) + "\n")

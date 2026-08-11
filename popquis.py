@@ -13,7 +13,7 @@ from modules.breeder import Breeder
 from modules.experiment import Configuration, Coordinator, Critic
 from modules.locations import Locations
 from modules.parsing import parse_qtl_encoding
-from modules.reporting import write_report_tsv, plot_replicate_exemplars, plot_report
+from modules.reporting import write_raw_tsv, plot_replicate_exemplars, plot_report, write_thresholds_tsv
 from modules.validation import validate_args, validate_breeding_population
 
 def main():
@@ -139,18 +139,21 @@ def main():
     critic.run(configuration)
     
     # Produce an output tabular report of the simulation outcomes
-    if not (os.path.isfile(args.locations.outputTSV) and os.path.isfile(args.locations.outputTSV + Locations.OKAY_SUFFIX)):
-        write_report_tsv(args.locations, configuration)
-        Locations.touch(args.locations.outputTSV)
+    if not (os.path.isfile(args.locations.rawTSV) and os.path.isfile(args.locations.rawTSV + Locations.OKAY_SUFFIX)):
+        write_raw_tsv(args.locations, configuration)
+        Locations.touch(args.locations.rawTSV)
     else:
-        print(f"# Output report table '{args.locations.outputTSV}' already exists; skipping ...")
+        print(f"# Raw results table '{args.locations.rawTSV}' already exists; skipping ...")
     
     # Produce exemplar plots for QC purposes
-    "This allows visual assessment of simulated ED statistics against their scores"
+    "This allows visual QC assessment of simulated ED statistics against their scores"
     plot_replicate_exemplars(args.locations, configuration)
     
     # Produce the final stacked barplot visualisation
-    plot_report(args.locations, configuration)
+    foundMilestones = plot_report(args.locations, configuration)
+    
+    # Produce the final summary table of the threshold points
+    write_thresholds_tsv(args.locations, configuration, foundMilestones)
     
     print("Program completed successfully!")
 

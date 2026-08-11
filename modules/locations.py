@@ -62,8 +62,12 @@ class Locations:
         return os.path.join(self.storageDir, "group2.npy")
     
     @property
-    def outputTSV(self):
-        return os.path.join(self.workingDirectory, "report.tsv")
+    def rawTSV(self):
+        return os.path.join(self.workingDirectory, "raw_results.tsv")
+    
+    @property
+    def thresholdsTSV(self):
+        return os.path.join(self.workingDirectory, "thresholds.tsv")
     
     # Attributes with value input
     def outputPNG(self, value):

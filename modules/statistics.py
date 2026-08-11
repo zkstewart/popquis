@@ -220,9 +220,10 @@ class Calculator:
         like to give the most granular estimate possible.
         
         Returns:
-            weak95 -- an integer of the pop. size which first has >=95% samples with at least a weak signal
-            mid95 -- an integer of the pop. size which first has >=95% samples with at least a mid/intermediate signal
-            strong95 -- an integer of the pop. size which first has >=95% samples with at least a strong signal
+            milestones -- a dictionary with keys:
+                'atleast_weak' -- an integer of the pop. size which first has >=95% samples with at least a weak signal
+                'atleast_mid' -- an integer of the pop. size which first has >=95% samples with at least a mid/intermediate signal
+                'strong_signal' -- an integer of the pop. size which first has >=95% samples with at least a strong signal
         '''
         CUTOFF = 0.95
         
