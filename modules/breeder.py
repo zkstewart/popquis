@@ -104,7 +104,9 @@ class Breeder:
         
         self._define_qtl_ranges()
     
-    def produce_progeny(self, locations, combinationEvaluator, batchSize=1000, minimumGroupSize=10000, seed=1234):
+    def produce_progeny(self, locations, combinationEvaluator,
+                        batchSize=1000, minimumGroupSize=10000, seed=1234,
+                        quiet=False, simulatorToUse="popquis"):
         '''
         Parameters:
             locations -- a Locations object with .group1Npy and .group2Npy attributes to indicate the file
@@ -119,6 +121,11 @@ class Breeder:
                                 group1 and group2, before simulation can terminate. Once a group meets or
                                 exceeds this value, no more individuals will be stored for that group.
             seed -- an integer to specify a random number seed used by Chromax when generating progeny
+            quiet -- a boolean indicating whether logging information should be emitted (False) or
+                     suppressed (True); default is False to emit logging info
+            simulatorToUse -- a string currently supporting: 'popquis' to use the internally implemented
+                              simulator, or 'chromax' to use the external Chromax library; default is 'popquis'
+                              to use the internal library, owing to bugs in the Chromax library as of 11th Aug 2026.
         '''
         # Create a storage container for each population / load an existing and ongoing population build
         group1 = Population(locations.group1Npy)
@@ -127,8 +134,13 @@ class Breeder:
         group2.load()
         
         # Simulate progeny in batches to attain a pre-requisite population size for each group
-        #simulator = ChromaxSimulator(self.parent1, self.parent2, self.genomeMap)
-        simulator = MeiosisSimulator(self.parent1, self.parent2, self.genomeMap)
+        if simulatorToUse == "popquis":
+            simulator = MeiosisSimulator(self.parent1, self.parent2, self.genomeMap)
+        elif simulatorToUse == "chromax":
+            simulator = ChromaxSimulator(self.parent1, self.parent2, self.genomeMap)
+        else:
+            raise ValueError(f"Breeder.produce_progeny does not recognise '{simulatorToUse}' as a valid simulator")
+        
         while (group1.individuals is None or group1.individuals < minimumGroupSize) or (group2.individuals is None or group2.individuals < minimumGroupSize):
             f1 = simulator.cross(batchSize=batchSize)
             
@@ -160,7 +172,8 @@ class Breeder:
             
             # Provide some logging information
             "This also helps to figure out what the inheritance ratio is for the QTL combination"
-            print(f"# Simulated a batch of {batchSize} individuals: {numGroup1} in group1 and {numGroup2} in group2")
+            if not quiet:
+                print(f"# Simulated a batch of {batchSize} individuals: {numGroup1} in group1 and {numGroup2} in group2")
             
             # Re-load data to enable checking of group size
             group1.load()
