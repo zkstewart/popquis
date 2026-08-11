@@ -10,6 +10,8 @@ git clone https://github.com/zkstewart/popquis.git
 
 # Create conda environment
 conda create -n popquis python numpy pandas npy-append-array matplotlib scipy pillow
+conda activate popquis
+pip install chromax
 
 # Run popquis (example below)
 python popquis.py \
