@@ -181,7 +181,7 @@ def plot_replicate_exemplars(locations, configuration):
             
             image.save(plotFileName)
 
-def _separate_thresholds(thresholds, delta):
+def _separate_thresholds(thresholds, delta, info=None):
     '''
     Modifies the x coordinates of marker threshold lines to ensure
     the visibility of any overlapping markers.
@@ -190,6 +190,8 @@ def _separate_thresholds(thresholds, delta):
         thresholds -- a list of (name, x, colour) tuples
         delta -- a float giving the minimum spacing needed between
                  adjacent threshold lines
+        info -- None if no logging info should be emitted, or a dict
+                with keys: "error" "balance" "qtl"
     Returns:
         adjustedThresholds -- a list akin to the input thresholds
                               but with modifications to the x value
@@ -223,9 +225,16 @@ def _separate_thresholds(thresholds, delta):
         # Multi-member clusters get spaced around the mean
         centre = np.mean([x for _, x, _ in group])
         
-        for i, (name, _, colour) in enumerate(group):
+        for i, (name, originalX, colour) in enumerate(group):
             offset = (i - (len(group) - 1) / 2) * delta
-            adjusted.append((name, centre + offset, colour))
+            newX = centre + offset
+            adjusted.append((name, newX, colour))
+            if info:
+                error, balance, qtl = info["error"], info["balance"], info["qtl"]
+                print(f"QTL #{qtl} barplot with phenotype error '{error}' and " + 
+                      f"balance '{balance}' had the {name} threshold visually " + 
+                      f"adjusted to prevent overlap; actual value is {originalX} " +
+                      f"but line was plotted at {newX}")
     
     return adjusted
 
@@ -328,7 +337,12 @@ def plot_report(locations, configuration):
                     ("Moderate", milestones["atleast_mid"], "black"),
                     ("Strong", milestones["strong_signal"], "#FFFF00")
                 ], dtype=object)
-                thresholds = _separate_thresholds(thresholds, DELTA) # prevent overlap
+                thresholds = _separate_thresholds(thresholds, DELTA, # prevent overlap
+                                                  info={
+                                                      "error": phenotypeError,
+                                                      "balance": popBalance,
+                                                      "qtl": qtlNum
+                                                  }) 
                 
                 for labelStr, xCoord, colourStr in thresholds:
                     marker = ax.vlines(xCoord,
