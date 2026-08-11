@@ -61,7 +61,8 @@ def main():
                    choices=["none", "weak", "moderate", "strong"],
                    help="""If you are modelling multiple QTLs, specify the linkage strength
                    of each QTL to its neighbour; if you provided n QTLs to -q, you should
-                   provide n-1 values here""")
+                   provide n-1 values here""",
+                   default=[])
     p.add_argument("-t", dest="threads",
                    required=True,
                    type=int,
