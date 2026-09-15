@@ -20,7 +20,7 @@ from modules.statistics import Calculator
 IMG_WIDTH = 525
 IMG_HEIGHT = 525
 IMG_DPI = 150
-LABEL_WIDTH = IMG_WIDTH//4
+LABEL_WIDTH = IMG_WIDTH//4 # division by 4 is arbitrary; makes it smaller than the standard plot square
 
 STACK_COLOURS = ["#E24A33", "#348ABD", "#988ED5", "#777777"]
 
@@ -95,7 +95,7 @@ def _popsize_label_segment(popSize):
     plotImg = Image.frombytes("RGBA", (w , h), buf.tobytes())
     return plotImg
 
-def _qtl_ed_plot(y, score):
+def _qtl_ed_plot(y, title, colour="blue"):
     '''
     Obtains a plot (as a Pillow Image object) for visualising the line fit to the ED^4 data.
     
@@ -111,11 +111,15 @@ def _qtl_ed_plot(y, score):
                      num=1, clear=True, layout="tight") # prevent memory leak
     ax = fig.add_subplot()
     
-    ax.plot(np.arange(0, len(y)), y)
+    ax.plot(np.arange(0, len(y)), y, color=colour)
     #ax.scatter(x, y, label="SNP segregation")
     ax.set_xlabel("Variant number")
     ax.set_ylabel("$ED^4$")
-    ax.set_title(round(score, 4))
+    
+    if isinstance(title, float):
+        ax.set_title(round(title, 4))
+    else:
+        ax.set_title(title)
     
     # Convert to PIL Image object
     fig.canvas.draw()
@@ -147,7 +151,7 @@ def plot_replicate_exemplars(locations, configuration):
             
             # Format an Image for later output
             nrow = len(popSizes)
-            ncol = 4 # one exemplar for strengths: none, weak, moderate, strong
+            ncol = 5 # one exemplar for strengths: none, weak, moderate, strong, then the avg plot
             image = Image.new("RGB", (LABEL_WIDTH + IMG_WIDTH*ncol, IMG_HEIGHT*nrow))
             y_offset = -IMG_HEIGHT
             for popSizeED, popSizeScore, popSize in zip(qtlED, qtlScores, popSizes):
@@ -163,6 +167,10 @@ def plot_replicate_exemplars(locations, configuration):
                         remainingExemplars -= 1
                     if remainingExemplars == 0:
                         break
+                
+                # Add the average plot
+                avgED = np.mean(popSizeED, axis=0)
+                exemplars.append(_qtl_ed_plot(avgED, "Mean", colour="orange"))
                 
                 # Store the exemplar plots
                 labelPlot = _popsize_label_segment(popSize)
