@@ -589,7 +589,7 @@ class TestBreeder(unittest.TestCase):
         markerRow = breeder.genomeMap.markers
         self.assertEqual(len(markerRow), 2) # should be two marker rows
         
-        self.assertEqual(breeder.qtlRanges, [(0, 100), (101, 201)])
+        self.assertEqual(breeder.qtlRanges, [(0, 50, 100), (101, 151, 201)])
         
         # Clean up
         cleanup()
@@ -1084,8 +1084,8 @@ class TestCritic(unittest.TestCase):
         positions2 = [0, 50]
         positions2 = [ ("chr1", x) for x in positions2 ]
         
-        expectedQtlRanges1 = [(0, 100)] # region is 100bp long, and 0-based
-        expectedQtlRanges2 = [(0, 75), (76, 150)] # region is 150bp long, and 0-based
+        expectedQtlRanges1 = [(0, 50, 100)] # region is 100bp long, and 0-based
+        expectedQtlRanges2 = [(0, 50, 75), (76, 100, 150)] # region is 150bp long, and 0-based
         
         # Act
         # critic1 = Critic(locations)
@@ -1109,17 +1109,23 @@ class TestCritic(unittest.TestCase):
         y4 = np.array([
             *list(np.ones(19)),
             1.01,
-            1.01,
             *list(np.ones(19))
         ])
+        qtlPeakIndex = len(y4) // 2
         
         # Act
-        leftCorr, rightCorr, leftWidth, rightWidth = Template.fit_gauss(y4) # near perfect
-        criticScore, leftWidth, rightWidth = Critic.score(y4) # np.float64(0.02000000000000001)
+        leftY = y4[:qtlPeakIndex+1] # include the peak
+        rightY = np.flip(y4[qtlPeakIndex:]) # mirror to match the left side trend
+        
+        leftCorr, leftWidth = Template.fit_gauss(leftY) # perfect
+        rightCorr, rightWidth = Template.fit_gauss(rightY) # perfect
+        
+        criticScore, leftWidth, rightWidth = Critic.score(y4, qtlPeakIndex) # perfect
         
         # Assert
-        self.assertTrue(leftCorr > criticScore) # Critic penalises the lack of magnitude/prominence
-        self.assertAlmostEqual(leftCorr, 1) # without Critic penalisation the correlation is very good
+        self.assertTrue(leftCorr == criticScore) # no penalty is applied during scoring
+        self.assertEqual(leftCorr, 1)
+        self.assertEqual(leftWidth, rightWidth) # both sides are an identical mirror of each other
     
     def test_strengths(self):
         # Arrange
@@ -1176,6 +1182,8 @@ class TestCritic(unittest.TestCase):
         numSizes = 3
         bootstraps = 11
         
+        qtlPeakIndex = numVariants // 2
+        
         # Arrange the Breeder object
         cmMbp = 3.0
         genotype1 = [Genotype("0/1"), Genotype("0/1"), Genotype("1/1")]
@@ -1203,15 +1211,14 @@ class TestCritic(unittest.TestCase):
         # Act to emulate the Critic process
         critic = Critic(locations)
         
-        #startIndex, endIndex = critic.qtlRanges[0]
-        startIndex, endIndex = breeder.qtlRanges[0]
+        startIndex, qtlIndex, endIndex = breeder.qtlRanges[0]
         qtlED = resultsArray[:,:,startIndex:endIndex+1]
         numPopSizes, numBootstraps, numVariants = qtlED.shape
         
         scores = []
         for popSizeArray in qtlED:
             for replicateArray in popSizeArray:
-                score, leftWidth, rightWidth = Critic.score(replicateArray)
+                score, leftWidth, rightWidth = Critic.score(replicateArray, qtlPeakIndex)
                 scores.append(score)
         
         scores = np.stack(np.split(np.array(scores), numPopSizes)) # shape = (popsize, bootstraps)
@@ -1258,6 +1265,15 @@ def _generate_template_y_arrays():
     
     return y1, y2, y3, y4, y5, y6
 
+def _split_template_in_half(y, splitIndex=None):
+    if splitIndex is None:
+        splitIndex = len(y) // 2
+    
+    leftY = y[:splitIndex] # don't +1 like we "should" because the array is generated asymmetrically
+    rightY = np.flip(y[splitIndex:])
+    
+    return leftY, rightY
+
 class TestTemplate(unittest.TestCase):
     def test_gauss(self):
         """This test used to make more sense before refactoring the Template
@@ -1266,14 +1282,31 @@ class TestTemplate(unittest.TestCase):
         score that is approximately equal to each other."""
         # Arrange
         y1, y2, y3, y4, y5, y6 = _generate_template_y_arrays()
+        y1L, y1R = _split_template_in_half(y1)
+        y2L, y2R = _split_template_in_half(y2)
+        y3L, y3R = _split_template_in_half(y3)
+        y4L, y4R = _split_template_in_half(y4)
+        y5L, y5R = _split_template_in_half(y5)
+        y6L, y6R = _split_template_in_half(y6)
         
         # Act
-        leftCorr1, rightCorr1, leftWidth1, rightWidth1 = Template.fit_gauss(y1)
-        leftCorr2, rightCorr2, leftWidth2, rightWidth2 = Template.fit_gauss(y2)
-        leftCorr3, rightCorr3, leftWidth3, rightWidth3 = Template.fit_gauss(y3)
-        leftCorr4, rightCorr4, leftWidth4, rightWidth4 = Template.fit_gauss(y4)
-        leftCorr5, rightCorr5, leftWidth5, rightWidth5 = Template.fit_gauss(y5)
-        leftCorr6, rightCorr6, leftWidth6, rightWidth6 = Template.fit_gauss(y6)
+        leftCorr1, leftWidth1 = Template.fit_gauss(y1L)
+        rightCorr1, rightWidth1 = Template.fit_gauss(y1R)
+        
+        leftCorr2, leftWidth2 = Template.fit_gauss(y2L)
+        rightCorr2, rightWidth2 = Template.fit_gauss(y2R)
+        
+        leftCorr3, leftWidth3 = Template.fit_gauss(y3L)
+        rightCorr3, rightWidth3 = Template.fit_gauss(y3R)
+        
+        leftCorr4, leftWidth4 = Template.fit_gauss(y4L)
+        rightCorr4, rightWidth4 = Template.fit_gauss(y4R)
+        
+        leftCorr5, leftWidth5 = Template.fit_gauss(y5L)
+        rightCorr5, rightWidth5 = Template.fit_gauss(y5R)
+        
+        leftCorr6, leftWidth6 = Template.fit_gauss(y6L)
+        rightCorr6, rightWidth6 = Template.fit_gauss(y6R)
         
         # Assert
         self.assertAlmostEqual(leftCorr1, rightCorr1, places=2)
@@ -1292,14 +1325,31 @@ class TestTemplate(unittest.TestCase):
     def test_focus(self):
         # Arrange
         y1, y2, y3, y4, y5, y6 = _generate_template_y_arrays()
+        y1L, y1R = _split_template_in_half(y1)
+        y2L, y2R = _split_template_in_half(y2)
+        y3L, y3R = _split_template_in_half(y3)
+        y4L, y4R = _split_template_in_half(y4)
+        y5L, y5R = _split_template_in_half(y5)
+        y6L, y6R = _split_template_in_half(y6)
         
         # Act
-        leftFocus1, rightFocus1 = Template.fit_focus(y1)
-        leftFocus2, rightFocus2 = Template.fit_focus(y2)
-        leftFocus3, rightFocus3 = Template.fit_focus(y3)
-        leftFocus4, rightFocus4 = Template.fit_focus(y4)
-        leftFocus5, rightFocus5 = Template.fit_focus(y5)
-        leftFocus6, rightFocus6 = Template.fit_focus(y6)
+        leftFocus1 = Template.fit_focus(y1L, np.max(y1))
+        rightFocus1 = Template.fit_focus(y1R, np.max(y1))
+        
+        leftFocus2 = Template.fit_focus(y2L, np.max(y2))
+        rightFocus2 = Template.fit_focus(y2R, np.max(y2))
+        
+        leftFocus3 = Template.fit_focus(y3L, np.max(y3))
+        rightFocus3 = Template.fit_focus(y3R, np.max(y3))
+        
+        leftFocus4 = Template.fit_focus(y4L, np.max(y4))
+        rightFocus4 = Template.fit_focus(y4R, np.max(y4))
+        
+        leftFocus5 = Template.fit_focus(y5L, np.max(y5))
+        rightFocus5 = Template.fit_focus(y5R, np.max(y5))
+        
+        leftFocus6 = Template.fit_focus(y6L, np.max(y6))
+        rightFocus6 = Template.fit_focus(y6R, np.max(y6))
         
         # Assert
         self.assertEqual(leftFocus1, rightFocus1)

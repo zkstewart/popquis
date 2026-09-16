@@ -10,31 +10,33 @@ from scipy.optimize import minimize_scalar
 class Template:
     '''
     Methods:
-        split_gaussian_template -- produces a numpy array with a Guassian distribution
-                                      of numbers from 0 to 1
+        half_gaussian_template -- produces a numpy array with a Guassian distribution
+                                  cut in half to give an ascent of numbers from 0 to 1
         fit -- fits a numpy array of statistical values against a Guassian template
                to measure its correlation to the template shape and how "pointy" that
                template is.
     '''
     @staticmethod
-    def split_gaussian_template(length, peakFraction=0.20, left=True):
+    def half_gaussian_template(halfLength, peakFraction=0.20):
+        '''
+        Parameters:
+            halfLength -- an integer giving the length of a pre-split statistical
+                          distribution i.e., the length of the half that we want to
+                          create a template for
+        '''
         if not (0 < peakFraction < 1):
             raise ValueError("peakFraction must be between 0 and 1")
         
-        x = np.arange(length)
-        centre = length // 2
+        x = np.arange(halfLength)
         
-        fwhm = peakFraction * length # how wide should our FWHM be
+        fwhm = peakFraction * (halfLength * 2) # 2*half for the full width
         sigma = fwhm / 2.355 # 2.355 is an approximate constant related to the FWHM
         
         template = np.exp(
-            -((x - centre) ** 2) /
+            -((x - halfLength) ** 2) /
             (2 * sigma**2)
         )
-        if left:
-            return template[:centre]
-        else:
-            return template[centre:]
+        return template
     
     @staticmethod
     def _correlation(y, template):
@@ -81,16 +83,12 @@ class Template:
             width -- a float of the FWHM between minimum -> maximum that provided optimised
                      fitting
         '''
-        def _objective(peakFraction, left):
-            template = Template.split_gaussian_template(
+        def _objective(peakFraction):
+            template = Template.half_gaussian_template(
                 len(y),
-                peakFraction,
-                left=left
+                peakFraction
             )
-            if left:
-                return -Template._correlation(y[:len(y)//2], template)
-            else:
-                return -Template._correlation(y[len(y)//2:], template)
+            return -Template._correlation(y, template)
         
         if not (0 < minimum < 1):
             raise ValueError("Template.fit minimum must be between 0 and 1")
@@ -99,35 +97,23 @@ class Template:
         if not minimum < maximum:
             raise ValueError("Template.fit maximum must be greater than minimum")
         
-        leftResult = minimize_scalar(
+        result = minimize_scalar(
             _objective,
             bounds=(minimum, maximum),
-            args=(True), # left is True
-            method="bounded"
-        )
-        rightResult = minimize_scalar(
-            _objective,
-            bounds=(minimum, maximum),
-            args=(False), # left is False; look at right side instead
             method="bounded"
         )
         
-        leftCorrelation = -leftResult.fun
-        rightCorrelation = -rightResult.fun
+        correlation = -result.fun
+        width = result.x
         
-        leftWidth = leftResult.x
-        rightWidth = rightResult.x
-        
-        return leftCorrelation, rightCorrelation, leftWidth, rightWidth
+        return correlation, width
     
     @staticmethod
     def generate_focus_template(y, transitionControl=2):
         '''
         Generates a template with a weighting/scoring schema for
         half of a QTL distribution, going from lowest at left to
-        highest at right; flip the input array first if it is
-        from the right-hand side of a distribution. An example
-        output might be like:
+        highest at right. An example output might be like:
         
         transitionControl(2) [-1, -0.75, -0.50, -0.25, 0, 0.25, 0.50, 0.75, 1]
         transitionControl(4) [-1, -0.83, -0.66, -0.50, -0.33, -0.16, 0, 0.50, 1]
@@ -152,7 +138,7 @@ class Template:
         return np.sum(focalPoints) / len(focalPoints)
     
     @staticmethod
-    def fit_focus(y):
+    def fit_focus(y, globalMax):
         '''
         Fits a numpy array of numeric values against a Template that models the
         importance of where a maximum value has occurred in terms of how it will
@@ -164,21 +150,16 @@ class Template:
         
         Parameters:
             y -- a numpy array of numeric values to have compared against the
-                 focus scoring function
+                 focus scoring function. This should be pre-split and potentially
+                 flipped such that y represents a distribution climbing from
+                 lowest (left) to highest (right; where the QTL location is).
+            globalMax -- a float value giving the maximum value of the original
+                         pre-split statistical distribution
         Returns:
-            leftFocus / rightFocus -- a float value from -1 to +1 indicating how
-                                      well the left and right side of the QTL
-                                      distribution draw focus to the true QTL
-                                      location
+            focus -- a float value from -1 to +1 indicating how well the statistical
+                     distribution draws focus to the true QTL location
         '''
-        leftY = y[:len(y)//2]
-        rightY = np.flip(y[len(y)//2:])
+        template = Template.generate_focus_template(y)
+        focus = Template._focusing(y, template)
         
-        leftTemplate = Template.generate_focus_template(leftY)
-        rightTemplate = Template.generate_focus_template(rightY)
-        
-        leftFocus = Template._focusing(leftY, leftTemplate)
-        rightFocus = Template._focusing(rightY, rightTemplate)
-        
-        return ((leftFocus * (np.max(leftY) / np.max(y))),  # scale the focus by its proportion
-               (rightFocus * (np.max(rightY) / np.max(y)))) # of actually containing a global max
+        return (focus * (np.max(y) / globalMax))  # scale the focus by its proportion of actually containing a global max

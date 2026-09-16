@@ -206,8 +206,8 @@ class Coordinator:
         '''
         Parameters:
             configuration -- a Configuration class object
-            qtlRanges -- a list of tuples giving (start, end) indices for each QTL, as
-                         derived from the Breeder object
+            qtlRanges -- a list of tuples giving (start, qtlPosition, end) indices for each QTL
+                         region, as derived from the Breeder object
             threads -- an integer giving the number of parallel processes to run where possible
             bootstraps -- an integer giving the number of bootstrap replicates to run
             power -- the power value to raise the Euclidean distance to; default and recommended is 4
@@ -262,7 +262,7 @@ class Coordinator:
                     raise Exception("Coordinator failed as futures list is empty; cause is unknown")
                 
                 # Store results in Spreadsheet
-                for i, (startIndex, endIndex) in enumerate(qtlRanges):
+                for i, (startIndex, _, endIndex) in enumerate(qtlRanges): # '_' is the qtl peak index, unused here
                     qtlArray = resultsArray[:,:,startIndex:endIndex+1] # +1 for end inclusive range
                     setattr(spreadsheet, f"ed{i+1}", qtlArray)
                 spreadsheet.save()
@@ -280,12 +280,6 @@ class Critic:
     Attributes:
         storageDir -- a string as from Locations.storageDir wherein Spreadsheet .npz files
                       can be found
-        genomeMap -- a GenomeMap object enabling array indexing for QTL positions
-        qtlRanges -- a list of tuples with structure akin to:
-                     [
-                         (genomeMapIndexStart, genomeMapIndexEnd),
-                         ...
-                     ]
     Methods:
         run -- pipeline function for multithreaded computation of the R^2 line fitting statistic
                for assessment of whether the Euclidean distance segregation would enable identification
@@ -300,7 +294,7 @@ class Critic:
         self.isCritic = True # object type validator
     
     @staticmethod
-    def penalty(y, globalMin, globalMax, left=True):
+    def penalty(y, globalMin, globalMax):
         '''
         Provides a scaling factor / correction / penalty to data distributions
         that do not provide a meaningfully visible distinction between the minimum
@@ -326,8 +320,6 @@ class Critic:
             y -- a numpy array for the left or right side of a data distribution
             globalMax -- the maximum value for the entire data distribution, not limited
                          to left or right side alone
-            left -- a boolean indicating whether this data distribution is the left side
-                    (True) of a QTL or the right (False)
         '''
         NOTICEABLE_INCREASE = 1.2
         
@@ -337,12 +329,8 @@ class Critic:
         medianY = np.median(y)
         localMax = np.max(y)
         
-        if left:
-            troughFactor = localMin / y[0] # is the left edge a trough
-            peakFactor = y[-1] / globalMax # is the right edge a global peak
-        else:
-            troughFactor = localMin / y[-1] # is the right edge a trough
-            peakFactor = y[0] / globalMax # is the left edge a global peak
+        troughFactor = localMin / y[0] # is the left edge a trough
+        peakFactor = y[-1] / globalMax # is the right edge a global peak
         
         if localMax != localMin:
             medianFraction = (medianY - localMin) / (localMax - localMin) # is the minimum closer to the median than the maximum
@@ -362,7 +350,7 @@ class Critic:
         return ( (troughFactor + peakFactor + slopeFactor) / 3 ) * magnitudeFactor
     
     @staticmethod
-    def score(y):
+    def score(y, qtlIndex):
         '''
         Evaluate whether the data points match a guassian Template shape, whereby a match
         would indicate a visibly identifiable peak in the segregation statistics at a
@@ -374,8 +362,8 @@ class Critic:
         
         Parameters:
             y -- a numpy array of numeric values for the ED^4 segregation of the SNPs
-            templates -- a list of one or more Template objects for assessing the shape
-                         of the data distribution
+            qtlIndex -- an integer giving the index of the y array where the QTL peak
+                        is expected to occur
         Returns:
             score -- a float ranging from zero (worst) to one (best) measuring a QTL's
                      ability to be identified in the data
@@ -385,33 +373,35 @@ class Critic:
         if np.isclose(np.std(y), 0): # isclose to tolerate floating point inaccuracy
             return 0, None, None # a flat line should have 0 score; also speed up program and avoid divide by zero error later
         
+        # Split the y array into halves at the QTL location
+        leftY = y[:qtlIndex+1] # include the peak
+        rightY = np.flip(y[qtlIndex:]) # mirror to match the left side trend
+        
+        globalMin = np.min(y)
+        globalMax = np.max(y)
+        
         # Optimise the correlation between a Guassian Template and this ED distribution
         "This models an idealised QTL curve with a maximum peak and a variably-shaped slope to the edge minimum"
-        leftCorr, rightCorr, leftWidth, rightWidth = Template.fit_gauss(y)
+        leftCorr, leftWidth = Template.fit_gauss(leftY)
+        rightCorr, rightWidth = Template.fit_gauss(rightY)
         
         # Score the focal point of each half of this ED distribition
         "This scores the location of the local maxima scaled by the global maximum"
-        leftFocus, rightFocus = Template.fit_focus(y)
+        leftFocus = Template.fit_focus(leftY, globalMax)
+        rightFocus = Template.fit_focus(rightY, globalMax)
         
         # Combine the correlation and focus measurements
-        leftScore = np.abs(leftCorr * leftFocus)
+        leftScore = np.abs(leftCorr * leftFocus) # strips the sign
         if leftCorr < 0 or leftFocus < 0:
-            leftScore = -leftScore
+            leftScore = -leftScore # make the sign negative again if applicable
         
         rightScore = np.abs(rightCorr * rightFocus)
         if rightCorr < 0 or rightFocus < 0:
             rightScore = -rightScore
         
         # Penalise a side if it has a low magnitude difference from min->max
-        centre = len(y) // 2
-        globalMin = np.min(y)
-        globalMax = np.max(y)
-        
-        leftY = y[:centre]
-        leftScalingFactor = Critic.penalty(leftY, globalMin, globalMax, left=True)
-        
-        rightY = y[centre:]
-        rightScalingFactor = Critic.penalty(rightY, globalMin, globalMax, left=False)
+        leftScalingFactor = Critic.penalty(leftY, globalMin, globalMax)
+        rightScalingFactor = Critic.penalty(rightY, globalMin, globalMax)
         
         # Scale and return the scores
         if leftScore > 0: # don't apply scaling to a value that's already negative
@@ -452,10 +442,15 @@ class Critic:
             axis=1
         )
     
-    def run(self, configuration):
+    def run(self, configuration, qtlRanges):
         '''
         Parameters:
             configuration -- a Configuration object recording the simulation variable combinations
+            qtlRanges -- a list of tuples with structure akin to:
+                     [
+                         (startIndex, qtlIndex, endIndex),
+                         ...
+                     ]
         '''
         for (popBalance, phenotypeError), popSizes in configuration:
             if popSizes is None or len(popSizes) == 0:
@@ -473,8 +468,10 @@ class Critic:
                     continue
             
             # If not, iterate through each QTL to generate its results
-            for i, qtlED in enumerate(spreadsheet.get_ed()):
+            for i, (qtlED, qtlRange) in enumerate(zip(spreadsheet.get_ed(), qtlRanges)):
                 numPopSizes, numBootstraps, numVariants = qtlED.shape
+                startIndex, qtlIndex, endIndex = qtlRange # endIndex is not used herein
+                qtlArrayIndex = qtlIndex - startIndex # adjust the QTL position to the array index, not the GenomeMap index
                 
                 # Assess each replication of this parameter combination
                 scores = []
@@ -482,7 +479,7 @@ class Critic:
                 rightWidths = []
                 for popSizeArray in qtlED:
                     for replicateArray in popSizeArray:
-                        score, leftWidth, rightWidth = Critic.score(replicateArray)
+                        score, leftWidth, rightWidth = Critic.score(replicateArray, qtlArrayIndex)
                         scores.append(score)
                         leftWidths.append(leftWidth)
                         rightWidths.append(rightWidth)
@@ -505,7 +502,6 @@ class Critic:
             spreadsheet.save()
     
     def __repr__(self):
-        return "<Critic object;storageDir='{0}';qtlRanges={1}>".format(
-            self.storageDir,
-            self.qtlRanges
+        return "<Critic object;storageDir='{0}'>".format(
+            self.storageDir
         )

@@ -186,6 +186,10 @@ class Breeder:
         as this function is being relocated from elsewhere as it makes more sense
         here. Despite the jank it is self contained enough that the main ugliness
         is in self.establish().
+        
+        Sets:
+            qtlRanges -- a list of tuples with format: (startIndex, qtlIndex, endIndex)
+                         defining the boundaries of each QTL subregion
         '''
         # Establish the qtlRanges attribute
         self.qtlRanges = []
@@ -211,7 +215,7 @@ class Breeder:
                     endIndex = int((row.Index + rows[i+1].Index) / 2)
                 
                 # Store and iterate
-                self.qtlRanges.append((startIndex, endIndex))
+                self.qtlRanges.append((startIndex, row.Index, endIndex)) # (start, qtlPosition, end)
                 lastEnd = endIndex
     
     def __repr__(self):

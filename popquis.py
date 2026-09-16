@@ -136,7 +136,7 @@ def main():
     
     # Score each simulated variable combination
     critic = Critic(args.locations)
-    critic.run(configuration)
+    critic.run(configuration, breeder.qtlRanges)
     
     # Produce an output tabular report of the simulation outcomes
     if not (os.path.isfile(args.locations.rawTSV) and os.path.isfile(args.locations.rawTSV + Locations.OKAY_SUFFIX)):
