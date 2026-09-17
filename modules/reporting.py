@@ -95,11 +95,17 @@ def _popsize_label_segment(popSize):
     plotImg = Image.frombytes("RGBA", (w , h), buf.tobytes())
     return plotImg
 
-def _qtl_ed_plot(y, title, colour="blue"):
+def _qtl_ed_plot(y, qtlArrayIndex, title, colour="blue"):
     '''
     Obtains a plot (as a Pillow Image object) for visualising the line fit to the ED^4 data.
-    
     Credit to https://www.icare.univ-lille.fr/how-to-convert-a-matplotlib-figure-to-a-numpy-array-or-a-pil-image/
+    
+    Parameters:
+        y -- a numpy array of numeric values for plotting as a line
+        qtlArrayIndex -- an integer giving the location of the QTL to mark with
+                         a gapped vertical line
+        title -- a string for any title text to display
+        colour -- a string indicating a matplotlib-recognised colour name
     '''
     try:
         plt.close(1)
@@ -115,7 +121,9 @@ def _qtl_ed_plot(y, title, colour="blue"):
     #ax.scatter(x, y, label="SNP segregation")
     ax.set_xlabel("Variant number")
     ax.set_ylabel("$ED^4$")
+    ax.axvline(x=qtlArrayIndex, color="red")
     
+    # Set the title
     if isinstance(title, float):
         ax.set_title(round(title, 4))
     else:
@@ -131,7 +139,7 @@ def _qtl_ed_plot(y, title, colour="blue"):
     plotImg = Image.frombytes("RGBA", (w , h), buf.tobytes())
     return plotImg
 
-def plot_replicate_exemplars(locations, configuration):
+def plot_replicate_exemplars(locations, configuration, qtlRanges):
     blank = _blank_plot_segment()
     
     for (popBalance, phenotypeError), popSizes in configuration:
@@ -143,15 +151,18 @@ def plot_replicate_exemplars(locations, configuration):
         spreadsheet.load()
         
         # Iterate over each simulated QTL
-        for i, (qtlED, qtlScores) in enumerate(zip(spreadsheet.get_ed(), spreadsheet.get_scores())):
+        for i, (qtlED, qtlScores, qtlRange) in enumerate(zip(spreadsheet.get_ed(), spreadsheet.get_scores(), qtlRanges)):
             plotFileName = os.path.join(locations.qcPlotsDir,
                                         f"{popBalance}_{phenotypeError}.qtl{i+1}.png")
             if os.path.isfile(plotFileName):
                 continue
             
+            startIndex, qtlIndex, endIndex = qtlRange
+            qtlArrayIndex = qtlIndex - startIndex
+            
             # Format an Image for later output
             nrow = len(popSizes)
-            ncol = 5 # one exemplar for strengths: none, weak, moderate, strong, then the avg plot
+            ncol = 4 # one exemplar for strengths: none, weak, moderate, strong
             image = Image.new("RGB", (LABEL_WIDTH + IMG_WIDTH*ncol, IMG_HEIGHT*nrow))
             y_offset = -IMG_HEIGHT
             for popSizeED, popSizeScore, popSize in zip(qtlED, qtlScores, popSizes):
@@ -163,14 +174,10 @@ def plot_replicate_exemplars(locations, configuration):
                     thisStrength = Critic.scores_to_strength(np.array([[replicateScore]]))[0]
                     exemplarIndex = 0 if thisStrength[0] else 1 if thisStrength[1] else 2 if thisStrength[2] else 3
                     if exemplars[exemplarIndex] is None:
-                        exemplars[exemplarIndex] = _qtl_ed_plot(replicateED, replicateScore)
+                        exemplars[exemplarIndex] = _qtl_ed_plot(replicateED, qtlArrayIndex, replicateScore)
                         remainingExemplars -= 1
                     if remainingExemplars == 0:
                         break
-                
-                # Add the average plot
-                avgED = np.mean(popSizeED, axis=0)
-                exemplars.append(_qtl_ed_plot(avgED, "Mean", colour="orange"))
                 
                 # Store the exemplar plots
                 labelPlot = _popsize_label_segment(popSize)
@@ -188,6 +195,40 @@ def plot_replicate_exemplars(locations, configuration):
                         image.paste(exemplarPlot, (x_offset, y_offset))
             
             image.save(plotFileName)
+
+def plot_trend_exemplar(locations, configuration, qtlRanges):
+    # Get the parameter combination that will give the best trend
+    popBalance = 0.5
+    phenotypeError = 0.0
+    popSizes = configuration.combos[(popBalance, phenotypeError)]
+    
+    # Obtain the Spreadsheet this configuration will have results stored within
+    spreadsheet = Spreadsheet(locations.storageDir, popBalance, phenotypeError, popSizes)
+    spreadsheet.load()
+    
+    # Format an Image for later output
+    nrow = 1
+    ncol = len(qtlRanges)
+    image = Image.new("RGB", (IMG_WIDTH*ncol, IMG_HEIGHT*nrow))
+    x_offset = -IMG_WIDTH
+    
+    # Iterate over each simulated QTL
+    for i, (qtlED, qtlScores, qtlRange) in enumerate(zip(spreadsheet.get_ed(), spreadsheet.get_scores(), qtlRanges)):
+        startIndex, qtlIndex, endIndex = qtlRange
+        qtlArrayIndex = qtlIndex - startIndex
+        
+        # Get the ED for the largest pop. size
+        trendED = qtlED[-1] # array is ordered from lowest pop. to highest
+        avgED = np.mean(trendED, axis=0)
+        
+        # Store the plot in the ongoing image
+        qtlImg = _qtl_ed_plot(avgED, qtlArrayIndex, f"QTL{i+1}")
+        x_offset += IMG_WIDTH
+        image.paste(qtlImg, (x_offset, 0))
+    
+    # Save the output
+    image.save(locations.trendsPNG)
+    image.save(locations.trendsPDF)
 
 def _separate_thresholds(thresholds, delta, info=None):
     '''

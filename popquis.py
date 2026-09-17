@@ -146,8 +146,8 @@ def main():
         print(f"# Raw results table '{args.locations.rawTSV}' already exists; skipping ...")
     
     # Produce exemplar plots for QC purposes
-    "This allows visual QC assessment of simulated ED statistics against their scores"
-    plot_replicate_exemplars(args.locations, configuration)
+    plot_replicate_exemplars(args.locations, configuration, breeder.qtlRanges)
+    plot_trend_exemplar(args.locations, configuration, breeder.qtlRanges)
     
     # Produce the final stacked barplot visualisation
     foundMilestones = plot_report(args.locations, configuration)

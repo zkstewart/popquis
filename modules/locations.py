@@ -69,6 +69,14 @@ class Locations:
     def thresholdsTSV(self):
         return os.path.join(self.workingDirectory, "thresholds.tsv")
     
+    @property
+    def trendsPNG(self):
+        return os.path.join(self.workingDirectory, "qtl_trends.png")
+    
+    @property
+    def trendsPDF(self):
+        return os.path.join(self.workingDirectory, "qtl_trends.pdf")
+    
     # Attributes with value input
     def outputPNG(self, value):
         return os.path.join(self.workingDirectory, f"stacked_barplot.{value}.png")
