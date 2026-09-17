@@ -13,7 +13,8 @@ from modules.breeder import Breeder
 from modules.experiment import Configuration, Coordinator, Critic
 from modules.locations import Locations
 from modules.parsing import parse_qtl_encoding
-from modules.reporting import write_raw_tsv, plot_replicate_exemplars, plot_report, write_thresholds_tsv
+from modules.reporting import write_raw_tsv, write_thresholds_tsv, \
+    plot_trend_exemplar, plot_replicate_exemplars, plot_report
 from modules.validation import validate_args, validate_breeding_population
 
 def main():
